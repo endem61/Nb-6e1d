@@ -107,6 +107,13 @@ textarea{min-height:70px;resize:vertical}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:8px 14px;cursor:pointer;font-weight:500;min-height:40px}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.gtiles{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.gtile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-width:0}
+.gtile.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.gt-main{background:none;border:0;text-align:left;padding:12px 12px 6px;display:flex;flex-direction:column;gap:2px;cursor:pointer;border-radius:var(--r) var(--r) 0 0}
+.gt-main b{font-size:1.15rem}
+.gt-act{display:flex;gap:6px;padding:0 10px 10px}
+.gt-act .btn{flex:1;padding:6px 8px}
 
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:.92rem}
@@ -143,6 +150,7 @@ tfoot td{font-weight:700;border-bottom:0}
 <main><div id="view"></div></main>
 <nav class="tabs" aria-label="Bereiche"><div class="in" id="nav"></div></nav>
 <input type="file" id="beleg-file" accept="image/*,application/pdf" hidden>
+<input type="file" id="scan-file" accept="image/*" capture="environment" hidden>
 <input type="file" id="import-file" accept="application/json,.json" hidden>
 <div class="toast" id="toast" hidden></div>
 
@@ -498,7 +506,8 @@ function render(){
   if(!S.ready&&db!==null){v.innerHTML='<div class="empty">Daten werden geladen …</div>';return}
   if(!db)return;
   if(!S.einheiten.length&&!S.kostenarten.length&&!S.belege.length){v.innerHTML=startScreen();bindView();bindServer();return}
-  if(S.edit){v.innerHTML=renderEdit();bindEdit();hydrateBlobs(v);return}
+  if(S.edit){if($('#f-edit')&&v.dataset.editKey===JSON.stringify(S.edit))return;v.innerHTML=renderEdit();v.dataset.editKey=JSON.stringify(S.edit);bindEdit();hydrateBlobs(v);return}
+  v.dataset.editKey='';
   v.innerHTML=({start:viewStart,belege:viewBelege,zaehler:viewZaehler,abrechnung:viewAbr,abschluss:viewAbschluss,einst:viewEinst}[S.tab])();
   bindView();
 }
@@ -537,18 +546,32 @@ function viewStart(){
 }
 
 /* Belege */
+const GRUPPEN=[['heizung','Heizung'],['wasser','Wasser'],['muell','Müll'],['strom','Strom'],['abgaben','Steuer & Versicherung'],['haus','Haus & Service'],['sonst','Sonstiges'],['privat','Nicht umlagefähig']];
+const GRUPPE_NAME=Object.fromEntries(GRUPPEN);
+function gruppeVon(k){if(!k)return'sonst';if(k.gruppe)return k.gruppe;const n=String(k.name||'').toLowerCase();
+  if(k.umlagefaehig===false)return'privat';
+  if(/heiz|pellet|schornstein|kamin|öl\b/.test(n))return'heizung';if(/wasser/.test(n))return'wasser';if(/müll|abfall/.test(n))return'muell';if(/strom/.test(n))return'strom';
+  if(/steuer|versicherung|tv|rundfunk|kabel/.test(n))return'abgaben';if(/hausmeister|garten|reinigung|winter/.test(n))return'haus';return'sonst'}
+const ICON_CAM='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
 function viewBelege(){
-  const y=S.year;let B=belegeJahr(y);if(S.filterK)B=B.filter(b=>b.kostenart===S.filterK);
-  B.sort((a,b)=>String(b.datum).localeCompare(String(a.datum)));
-  const sum=B.reduce((s,b)=>s+num(b.betrag),0);
-  let lastM='';
-  return `<div class="view-head"><h2>Belege ${y}</h2><div class="actions"><button class="btn primary" data-act="new-beleg">+ Beleg</button></div></div>
+  const y=S.year,alle=belegeJahr(y),Ks=kostenarten();const gSum={},gN={};
+  alle.forEach(b=>{const g=gruppeVon(kById(b.kostenart));gSum[g]=(gSum[g]||0)+num(b.betrag);gN[g]=(gN[g]||0)+1});
+  const gruppen=GRUPPEN.filter(([g])=>Ks.some(k=>gruppeVon(k)===g));
+  if(S.filterG&&!gruppen.some(([g])=>g===S.filterG))S.filterG='';
+  let B=alle;if(S.filterG)B=B.filter(b=>gruppeVon(kById(b.kostenart))===S.filterG);if(S.filterK)B=B.filter(b=>b.kostenart===S.filterK);
+  B=[...B].sort((a,b)=>String(b.datum).localeCompare(String(a.datum)));
+  const sum=B.reduce((s,b)=>s+num(b.betrag),0);let lastM='';
+  const kInG=S.filterG?Ks.filter(k=>gruppeVon(k)===S.filterG):[];
+  return `<div class="view-head"><h2>Belege ${y}</h2><div class="actions"><button class="btn primary" data-foto-g="">${ICON_CAM} Beleg fotografieren</button><button class="btn" data-act="new-beleg">+ Beleg</button></div></div>
   <div class="stack">
-  <div class="field" style="max-width:360px"><label for="f-filter">Kostenart</label><select id="f-filter"><option value="">Alle Kostenarten</option>${kostenarten().map(k=>`<option value="${k.id}" ${S.filterK===k.id?'selected':''}>${esc(k.name)}</option>`).join('')}</select></div>
-  <div class="card"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="label">${B.length} Belege</span><span class="amt">${eur(sum)}</span></div>
+  <div class="gtiles">${gruppen.map(([g,l])=>`<div class="gtile${S.filterG===g?' on':''}">
+    <button class="gt-main" data-gruppe="${g}" aria-pressed="${S.filterG===g}"><span class="label">${l}</span><b class="num">${eur(gSum[g]||0)}</b><span class="small muted">${gN[g]||0} Belege</span></button>
+    <div class="gt-act"><button class="btn sm primary" data-foto-g="${g}" aria-label="${l}: Beleg fotografieren">${ICON_CAM} Foto</button><button class="btn sm" data-neu-g="${g}" aria-label="${l}: Beleg von Hand">+ Hand</button></div></div>`).join('')}</div>
+  ${kInG.length>1?`<div class="chips"><button class="chip" data-filter-k="" aria-pressed="${!S.filterK}">Alle ${esc(GRUPPE_NAME[S.filterG])}</button>${kInG.map(k=>`<button class="chip" data-filter-k="${k.id}" aria-pressed="${S.filterK===k.id}">${esc(k.name.replace(/^Heizung – /,''))}</button>`).join('')}</div>`:''}
+  <div class="card"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="label">${S.filterG?esc(GRUPPE_NAME[S.filterG])+' · ':''}${B.length} Belege</span><span class="amt">${eur(sum)}</span></div>
   <div class="list">${B.map(b=>{const m=String(b.datum).slice(0,7);let h='';if(m!==lastM){lastM=m;const[yy,mm]=m.split('-');h=`<div class="month-h">${MONATE[Number(mm)-1]||''} ${yy}</div>`}
     const k=kById(b.kostenart),e=b.einheit?eById(b.einheit):null;
-    return h+`<div class="row click" data-beleg="${b.id}"><div class="grow"><div class="title">${esc(b.text||k?.name||'Beleg')}</div><div class="small muted">${fmtDate(b.datum)} · ${esc(k?.name||'ohne Kostenart')}${e?' · nur '+esc(e.name):''}${b.abrJahr&&Number(String(b.datum).slice(0,4))!==Number(b.abrJahr)?' · zählt für '+b.abrJahr:''}${b.foto?' · 📎':''}</div></div><span class="amt">${eur(b.betrag)}</span></div>`}).join('')||`<div class="empty">Keine Belege für ${y}. Mit „+ Beleg“ die erste Rechnung erfassen.</div>`}</div></div></div>`;
+    return h+`<div class="row click" data-beleg="${b.id}"><div class="grow"><div class="title">${esc(b.text||k?.name||'Beleg')}</div><div class="small muted">${fmtDate(b.datum)} · ${esc(k?.name||'ohne Kostenart')}${e?' · nur '+esc(e.name):''}${b.abrJahr&&Number(String(b.datum).slice(0,4))!==Number(b.abrJahr)?' · zählt für '+b.abrJahr:''}${b.foto?' · Foto':''}</div></div><span class="amt">${eur(b.betrag)}</span></div>`}).join('')||`<div class="empty">Keine Belege${S.filterG?' für '+esc(GRUPPE_NAME[S.filterG]):''} in ${y}. Mit „Foto“ eine Rechnung fotografieren oder mit „+ Hand“ eintippen.</div>`}</div></div></div>`;
 }
 
 /* Zähler & Zahlungen */
@@ -753,7 +776,8 @@ function renderEdit(){
   const {type,id}=S.edit;
   const back=`<button class="btn sm" data-act="cancel">‹ Zurück</button>`;
   if(type==='beleg'){
-    const b=S.belege.find(x=>x.id===id)||{datum:S.year===new Date().getFullYear()?today():S.year+'-12-31',kostenart:S.filterK||''};
+    const gK=S.edit.gruppe?kostenarten().filter(k=>gruppeVon(k)===S.edit.gruppe):[];
+    const b=S.belege.find(x=>x.id===id)||{datum:S.year===new Date().getFullYear()?today():S.year+'-12-31',kostenart:S.filterK&&(!S.edit.gruppe||gruppeVon(kById(S.filterK))===S.edit.gruppe)?S.filterK:(gK.length===1?gK[0].id:'')};
     const ftype=b.fotoTyp||'';
     return `<div class="view-head">${back}<h2>${id?'Beleg bearbeiten':'Neuer Beleg'}</h2><span></span></div>
     <form class="card stack" id="f-edit">
@@ -761,7 +785,10 @@ function renderEdit(){
         <div class="field"><label for="b-betrag">Betrag (€)</label><input id="b-betrag" class="big-in" inputmode="decimal" required value="${b.betrag!==undefined?String(b.betrag).replace('.',','):''}" placeholder="0,00"></div>
         <div class="field"><label for="b-datum">Rechnungsdatum</label><input id="b-datum" type="date" required value="${esc(b.datum||'')}"></div>
       </div>
-      <div class="field"><label for="b-k">Kostenart</label><select id="b-k" required><option value="">Bitte wählen</option>${kostenarten().map(k=>`<option value="${k.id}" ${b.kostenart===k.id?'selected':''}>${esc(k.name)}${k.umlagefaehig===false?' (nicht umlagefähig)':''}</option>`).join('')}</select></div>
+      <div id="ocr-status" class="notice info small" hidden></div>
+      <div class="field"><label for="b-k">Kostenart</label><select id="b-k" required><option value="">Bitte wählen</option>${(()=>{const opt=k=>`<option value="${k.id}" ${b.kostenart===k.id?'selected':''}>${esc(k.name)}${k.umlagefaehig===false?' (nicht umlagefähig)':''}</option>`;
+        const g=S.edit.gruppe;if(!g)return kostenarten().map(opt).join('');const inG=kostenarten().filter(k=>gruppeVon(k)===g),rest=kostenarten().filter(k=>gruppeVon(k)!==g);
+        return `<optgroup label="${esc(GRUPPE_NAME[g]||'')}">${inG.map(opt).join('')}</optgroup><optgroup label="Andere">${rest.map(opt).join('')}</optgroup>`})()}</select></div>
       <div class="field"><label for="b-text">Beschreibung / Firma</label><input id="b-text" value="${esc(b.text||'')}" placeholder="z. B. Netze BW Abschlag, Stadtwerke Wasser"></div>
       <div class="fields">
         <div class="field"><label for="b-jahr">Zählt für Abrechnungsjahr</label><input id="b-jahr" inputmode="numeric" value="${esc(b.abrJahr||'')}" placeholder="wie Rechnungsdatum"></div>
@@ -771,7 +798,8 @@ function renderEdit(){
       <div class="field"><label for="b-notiz">Notiz</label><textarea id="b-notiz">${esc(b.notiz||'')}</textarea></div>
       ${assets?`<div class="field"><label>Beleg-Foto / PDF</label><div class="actions" style="align-items:center">
         ${b.foto?(ftype.startsWith('image')?`<img class="thumb" data-blob="${esc(b.foto)}" alt="Beleg" style="cursor:pointer" onclick="this.src&&window.open(this.src,'_blank')">`:`<button type="button" class="btn sm" data-blob="${esc(b.foto)}">PDF öffnen</button>`):''}
-        <button type="button" class="btn sm" data-act="foto">${b.foto?'Ersetzen':'Foto/PDF hinzufügen'}</button><span class="small muted" id="foto-st"></span></div></div>`:''}
+        <img class="thumb" id="foto-prev" alt="Neues Belegfoto" hidden>
+        <button type="button" class="btn sm" data-act="foto-cam">${ICON_CAM} Foto</button><button type="button" class="btn sm" data-act="foto">${b.foto?'Datei ersetzen':'Datei wählen'}</button><span class="small muted" id="foto-st"></span></div></div>`:''}
       <div class="actions" style="justify-content:space-between">
         ${id?`<button type="button" class="btn danger" data-act="del">Löschen</button>`:'<span></span>'}
         <button class="btn primary" ${S.canWrite?'':'disabled'}>Speichern</button></div>
@@ -812,6 +840,7 @@ function renderEdit(){
       <div class="field"><label for="k-kt">Begründung Abzug (erscheint in der Abrechnung)</label><input id="k-kt" value="${esc(k.kuerzungText||'')}" placeholder="z. B. 12 von 18 kW ins Heizwasser"></div>
       <div class="field"><label for="k-35">§35a Steuerermäßigung</label><select id="k-35"><option value="">Nein</option>${Object.entries(ART35).map(([a,l])=>`<option value="${a}" ${k.p35a===a?'selected':''}>${l}</option>`).join('')}</select></div>
       <div class="field"><label for="k-lohn">Lohnanteil % (wenn im Beleg kein Betrag)</label><input id="k-lohn" inputmode="decimal" value="${esc(k.lohnAnteil??'')}" placeholder="z. B. 100 Hausmeister"></div>
+      <div class="field"><label for="k-gr">Bereich bei Belege</label><select id="k-gr"><option value="">Automatisch (${esc(GRUPPE_NAME[gruppeVon({...k,gruppe:''})])})</option>${GRUPPEN.map(([g,l])=>`<option value="${g}" ${k.gruppe===g?'selected':''}>${l}</option>`).join('')}</select></div>
       <div class="field"><label for="k-st">Steuerlich</label><select id="k-st"><option value="">Normale Kosten</option><option value="zinsen" ${k.steuerTyp==='zinsen'?'selected':''}>Schuldzinsen</option></select></div>
     </div>
     <label class="check"><input type="checkbox" id="k-uml" ${k.umlagefaehig!==false?'checked':''}> Umlagefähig (kommt in die Abrechnung)</label>
@@ -830,6 +859,7 @@ function bindEdit(){
     const col={beleg:'belege',einheit:'einheiten',kostenart:'kostenarten'}[type];
     if(type==='kostenart'&&S.belege.some(b=>b.kostenart===id)){toast('Diese Kostenart hat noch Belege.');return}
     if(await del(col+'/'+id)){toast('Gelöscht');S.edit=null;render()}};
+  const fc=$('[data-act="foto-cam"]');if(fc)fc.onclick=()=>$('#scan-file').click();
   const fb=$('[data-act="foto"]');
   if(fb)fb.onclick=()=>$('#beleg-file').click();
   f.onsubmit=async ev=>{ev.preventDefault();
@@ -841,7 +871,10 @@ function bindEdit(){
       if(!d.betrag){toast('Bitte einen Betrag eingeben.');return}
       if(pendingFoto){d.foto=pendingFoto.id;d.fotoTyp=pendingFoto.type}
       const nid=id||uid();if(!id)d.erstellt=new Date().toISOString();
-      if(await save('belege/'+nid,d)){pendingFoto=null;toast(id?'Beleg gespeichert':'Beleg erfasst – '+eur(d.betrag));S.edit=null;render()}
+      const vk=f.dataset.vendor;
+      if(await save('belege/'+nid,d)){pendingFoto=null;toast(id?'Beleg gespeichert':'Beleg erfasst – '+eur(d.betrag));
+        if(vk&&d.kostenart&&(S.settings.lieferantK||{})[vk]!==d.kostenart)mutate('settings/main',x=>{x.lieferantK=x.lieferantK||{};x.lieferantK[vk]=d.kostenart;return x}).catch(()=>{});
+        S.edit=null;render()}
     }
     if(type==='einheit'){
       const old=eById(id)||{};
@@ -852,7 +885,7 @@ function bindEdit(){
     if(type==='kostenart'){
       const old=kById(id)||{};
       const d={...old,name:$('#k-name').value.trim(),schluessel:$('#k-s').value,anteilVerbrauch:num($('#k-anteil').value)||70,einheit:$('#k-einheit').value.trim(),
-        reihenfolge:num($('#k-rf').value),anteilUml:$('#k-up').value.trim()===''?100:Math.min(100,Math.max(0,num($('#k-up').value))),kuerzungText:$('#k-kt').value.trim(),p35a:$('#k-35').value,lohnAnteil:$('#k-lohn').value.trim()===''?'':num($('#k-lohn').value),steuerTyp:$('#k-st').value,umlagefaehig:$('#k-uml').checked,ausgeschlossen:$$('[data-aus]').filter(c=>c.checked).map(c=>c.dataset.aus)};delete d.id;
+        reihenfolge:num($('#k-rf').value),anteilUml:$('#k-up').value.trim()===''?100:Math.min(100,Math.max(0,num($('#k-up').value))),kuerzungText:$('#k-kt').value.trim(),p35a:$('#k-35').value,lohnAnteil:$('#k-lohn').value.trim()===''?'':num($('#k-lohn').value),steuerTyp:$('#k-st').value,gruppe:$('#k-gr').value,umlagefaehig:$('#k-uml').checked,ausgeschlossen:$$('[data-aus]').filter(c=>c.checked).map(c=>c.dataset.aus)};delete d.id;
       if(await save('kostenarten/'+(id||uid()),d)){toast('Kostenart gespeichert');S.edit=null;render()}
     }
   };
@@ -861,14 +894,67 @@ $('#import-file').addEventListener('change',async ev=>{
   const file=ev.target.files[0];ev.target.value='';if(!file)return;
   try{const n=await importJson(file);toast(n+' Einträge eingespielt');render()}catch(e){console.error(e);toast('Datei konnte nicht gelesen werden – ist es eine Nebenkosten-Sicherung?',5000)}
 });
-$('#beleg-file').addEventListener('change',async ev=>{
-  const file=ev.target.files[0];ev.target.value='';if(!file||!assets)return;
-  const st=$('#foto-st');if(st)st.textContent='Wird hochgeladen …';
+$('#beleg-file').addEventListener('change',ev=>{const file=ev.target.files[0];ev.target.value='';if(file)dateiAnhaengen(file)});
+let scanZiel=null;
+$('#scan-file').addEventListener('change',ev=>{const file=ev.target.files[0];ev.target.value='';if(!file)return;
+  if(!S.edit||S.edit.type!=='beleg'){S.edit={type:'beleg',id:null,gruppe:scanZiel||''};pendingFoto=null;render();window.scrollTo(0,0)}
+  dateiAnhaengen(file)});
+async function dateiAnhaengen(file){
+  const st=$('#foto-st');if(st)st.textContent='Wird gespeichert …';
   try{let blob=file;if(file.type.startsWith('image/'))blob=await compressImage(file);
     const r=await assets.upload(blob);pendingFoto={id:r.id,type:r.contentType};
-    if(st)st.textContent='Hochgeladen – zum Übernehmen „Speichern“ tippen.';
-  }catch(e){console.error(e);if(st)st.textContent='';toast(e&&e.code==='too_large'?'Datei zu groß (max. 20 MB).':'Hochladen fehlgeschlagen.')}
-});
+    const pv=$('#foto-prev');if(pv&&blob.type.startsWith('image/')){pv.src=URL.createObjectURL(blob);pv.hidden=false}
+    if(st)st.textContent=blob.type.startsWith('image/')?'Foto angehängt.':'PDF angehängt.';
+  }catch(e){console.error(e);if(st)st.textContent='';toast('Datei konnte nicht gespeichert werden.');return}
+  belegLesen(file);
+}
+/* ---------- Texterkennung (läuft im Gerät, keine Daten nach außen) ---------- */
+let ocrW=null;
+function ocrText(blob,onStatus){return new Promise(async(res,rej)=>{
+  if(!ocrW)ocrW=new Worker('ocr/ocr-worker.js');const buf=await blob.arrayBuffer();
+  ocrW.onmessage=e=>{const d=e.data;if(d.status){onStatus&&onStatus(d.status);return}d.ok?res(d.text):rej(new Error(d.err))};
+  ocrW.onerror=e=>{ocrW=null;rej(new Error(e.message||'Worker-Fehler'))};ocrW.postMessage(buf,[buf])})}
+const lieferKey=s=>String(s||'').toLowerCase().replace(/[^a-z0-9äöüß]/g,'').slice(0,24);
+function belegAuswerten(text){
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const amt=/(\d{1,3}(?:[.\s]\d{3})*|\d+)[,.](\d{2})(?!\d)/g;
+  const val=s=>Math.round(Number(s.replace(/[.\s](?=\d{3}\b)/g,'').replace(/\s/g,'').replace(',','.'))*100);
+  const kw=/(zu zahlen|gesamtbetrag|endbetrag|rechnungsbetrag|nachzahlung|abschlag|gesamt|summe|total|betrag)/i;
+  let best=0;
+  lines.forEach(l=>{if(!kw.test(l))return;const m=[...l.matchAll(amt)];if(m.length){const v=val(m[m.length-1][0]);if(v>best)best=v}});
+  if(!best){lines.forEach(l=>{[...l.matchAll(amt)].forEach(m=>{const v=val(m[0]);if(v>best&&v<10000000)best=v})})}
+  let datum='';const dm=text.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](20\d{2}|\d{2})\b/);
+  if(dm){const y=dm[3].length===2?'20'+dm[3]:dm[3];const mo=Number(dm[2]),d=Number(dm[1]);if(mo>=1&&mo<=12&&d>=1&&d<=31)datum=`${y}-${pad(mo)}-${pad(d)}`}
+  const firma=(lines.find(l=>/[A-Za-zÄÖÜäöü]{3,}/.test(l)&&!/rechnung|quittung|beleg|kassenbon|datum|seite|bescheid/i.test(l))||'').replace(/[^\wÄÖÜäöüß&.,\- ]/g,'').trim().slice(0,60);
+  return{betrag:best,datum,firma};
+}
+const KOSTEN_REGELN=[[/pellet/i,/pellet/i],[/heiz[öo]l|heizoel/i,/heizöl/i],[/schornstein|kaminfeger|kehr/i,/schornstein/i],[/wartung|inspektion|kundendienst/i,/wartung|inspektion/i],
+  [/abfall|müll|restmüll|biotonne/i,/müll/i],[/grundsteuer|grundbesitzabgaben/i,/grundsteuer/i],[/niederschlag/i,/niederschlag/i],[/wohngebäude|gebäudeversicherung/i,/gebäudeversicherung/i],
+  [/haftpflicht/i,/haftpflicht/i],[/hausmeister/i,/hausmeister/i],[/kabel|vodafone|rundfunk|tv/i,/tv|kabel/i],[/wasser|abwasser/i,/wasser/i],[/netze bw|enbw|strom|kwh/i,/strom/i],[/zins|darlehen/i,/zins/i]];
+function kostenartRaten(text,firma){
+  const sel=$('#b-k');if(!sel)return null;const erlaubt=[...sel.options].map(o=>o.value).filter(Boolean);
+  const gelernt=(S.settings.lieferantK||{})[lieferKey(firma)];if(gelernt&&erlaubt.includes(gelernt))return gelernt;
+  const g=S.edit&&S.edit.gruppe;const kand=kostenarten().filter(k=>erlaubt.includes(k.id));
+  const reihen=g?[kand.filter(k=>gruppeVon(k)===g),kand]:[kand];
+  for(const [t,kn] of KOSTEN_REGELN){if(!t.test(text))continue;for(const r of reihen){const k=r.find(k=>kn.test(k.name));if(k)return k.id}}
+  return null;
+}
+async function belegLesen(file){
+  const st=$('#ocr-status');const set=(t,show=true)=>{if(st){st.textContent=t;st.hidden=!show}};
+  if(/pdf/.test(file.type)){set('PDF angehängt – Betrag und Datum bitte selbst eintragen.');return}
+  set('Rechnung wird gelesen …');
+  try{const img=await compressImage(file,2000,.92);
+    const text=await ocrText(img,s=>set(s==='laden'?'Texterkennung wird gestartet … (beim ersten Mal ca. 5 MB laden)':'Rechnung wird gelesen …'));
+    if(!S.edit||S.edit.type!=='beleg'||!$('#f-edit'))return;
+    const r=belegAuswerten(text||'');const was=[];
+    const b=$('#b-betrag');if(r.betrag&&b&&!b.value){b.value=(r.betrag/100).toFixed(2).replace('.',',');was.push('Betrag')}
+    const d=$('#b-datum');if(r.datum&&d){d.value=r.datum;was.push('Datum')}
+    const t=$('#b-text');if(r.firma&&t&&!t.value){t.value=r.firma;was.push('Firma')}
+    const f=$('#f-edit');if(r.firma)f.dataset.vendor=lieferKey(r.firma);
+    const ks=$('#b-k');if(ks&&(!ks.value||(S.edit.gruppe&&ks.options.length>2))){const k=kostenartRaten(text,r.firma);if(k){ks.value=k;was.push('Kostenart')}}
+    set(was.length?'Erkannt: '+was.join(', ')+' – bitte prüfen und bei Bedarf ändern.':'Nichts sicher erkannt – bitte selbst eintragen.');
+  }catch(e){console.warn(e);set('Texterkennung nicht möglich ('+(e&&e.message||'Fehler')+') – bitte selbst eintragen.')}
+}
 async function compressImage(file,max=1800,q=.82){
   const url=URL.createObjectURL(file);
   try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});
@@ -883,7 +969,11 @@ async function compressImage(file,max=1800,q=.82){
 function bindView(){
   const v=$('#view');
   v.onclick=async e=>{
-    const t=e.target.closest('[data-act],[data-beleg],[data-einheit],[data-kostenart],[data-abr],[data-abr-sel],[data-tab-go]');if(!t)return;
+    const t=e.target.closest('[data-act],[data-beleg],[data-einheit],[data-kostenart],[data-abr],[data-abr-sel],[data-tab-go],[data-foto-g],[data-neu-g],[data-gruppe],[data-filter-k]');if(!t)return;
+    if(t.dataset.fotoG!==undefined){if(!kostenarten().length){toast('Bitte zuerst Kostenarten anlegen.');return go('einst')}scanZiel=t.dataset.fotoG;$('#scan-file').click();return}
+    if(t.dataset.neuG!==undefined){S.edit={type:'beleg',id:null,gruppe:t.dataset.neuG};pendingFoto=null;render();window.scrollTo(0,0);return}
+    if(t.dataset.gruppe!==undefined){S.filterG=S.filterG===t.dataset.gruppe?'':t.dataset.gruppe;S.filterK='';return render()}
+    if(t.dataset.filterK!==undefined){S.filterK=t.dataset.filterK;return render()}
     if(t.dataset.tabGo)return go(t.dataset.tabGo);
     if(t.dataset.beleg){S.edit={type:'beleg',id:t.dataset.beleg};pendingFoto=null;return render()}
     if(t.dataset.einheit){S.edit={type:'einheit',id:t.dataset.einheit};return render()}
@@ -891,7 +981,7 @@ function bindView(){
     if(t.dataset.abr){S.abrE=t.dataset.abr;return go('abrechnung')}
     if(t.dataset.abrSel){S.abrE=t.dataset.abrSel;return render()}
     const a=t.dataset.act;
-    if(a==='new-beleg'){if(!kostenarten().length){toast('Bitte zuerst Kostenarten anlegen.');return go('einst')}S.edit={type:'beleg',id:null};pendingFoto=null;render();window.scrollTo(0,0)}
+    if(a==='new-beleg'){if(!kostenarten().length){toast('Bitte zuerst Kostenarten anlegen.');return go('einst')}S.edit={type:'beleg',id:null,gruppe:S.tab==='belege'?S.filterG:''};pendingFoto=null;render();window.scrollTo(0,0)}
     if(a==='new-einheit'){S.edit={type:'einheit',id:null};render()}
     if(a==='new-kostenart'){S.edit={type:'kostenart',id:null};render()}
     if(a==='pdf')pdfExport();
