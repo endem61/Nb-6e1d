@@ -146,6 +146,7 @@ tfoot td{font-weight:700;border-bottom:0}
     <button class="icon-btn" id="y-prev" aria-label="Vorjahr">‹</button><b id="y-val">2026</b><button class="icon-btn" id="y-next" aria-label="Folgejahr">›</button>
   </div>
   <span class="status-dot" id="conn"><i></i><span>Verbinde …</span></span>
+  <button class="icon-btn" id="lock-btn" hidden aria-label="Jetzt sperren" title="Jetzt sperren" onclick="sperren()"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
 </div></header>
 <main><div id="view"></div></main>
 <nav class="tabs" aria-label="Bereiche"><div class="in" id="nav"></div></nav>
@@ -337,8 +338,8 @@ function bindServer(){
     catch(e){st.textContent=e.message||String(e)}};
 }
 /* Sicherung einspielen (JSON aus „Komplette Sicherung“) */
-async function importJson(file){
-  const d=JSON.parse(await file.text());let n=0;
+async function importJson(file,pw){
+  const d=await sicherungLesen(await file.text(),pw);let n=0;
   const put=async(p,v)=>{await LocalDB.write(p,v);syncMark(p);n++};
   if(d.settings)await put('settings/main',d.settings);
   for(const c of ['einheiten','kostenarten','belege'])for(const r of (d[c]||[])){const{id,...rest}=r;if(id)await put(c+'/'+id,rest)}
@@ -371,17 +372,126 @@ async function grundeinrichtung(){
   for(const [id,v] of Object.entries(K))await localDb.doc('kostenarten/'+id).set(v);
 }
 function startScreen(){return `<div class="card stack" style="max-width:520px;margin:24px auto;gap:14px">
-  <h2>Willkommen</h2>
+  <h2>Willkommen</h2>${importPwCard()}
   <p class="small muted" style="margin:0">Auf diesem Gerät sind noch keine Daten. Wie möchten Sie beginnen?</p>
   <button class="btn primary" data-act="neu">Neu einrichten (Haus 1, Haus 2, Salon und alle Kostenarten)</button>
   <button class="btn" data-act="sicherung">Sicherung einspielen (JSON-Datei)</button>
   ${serverCard()}</div>`}
+
+/* ================= Sicherheit: App-Sperre mit Passwort, verschlüsselte Sicherungen, Bericht ================= */
+const UI={frei:false,key:null,lockErr:'',pwNeu:false,importDatei:null,importErr:'',persist:null};
+const te=new TextEncoder();
+const b64=buf=>{let s='';const a=new Uint8Array(buf);for(let i=0;i<a.length;i+=32768)s+=String.fromCharCode.apply(null,a.subarray(i,i+32768));return btoa(s)};
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const zufall=n=>b64(crypto.getRandomValues(new Uint8Array(n)));
+async function pwHash(pw,salt){const k=await crypto.subtle.importKey('raw',te.encode(pw),'PBKDF2',false,['deriveBits']);
+  return b64(await crypto.subtle.deriveBits({name:'PBKDF2',salt:unb64(salt),iterations:150000,hash:'SHA-256'},k,256))}
+async function aesKey(pw,salt){const k=await crypto.subtle.importKey('raw',te.encode(pw),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+const sperreAn=()=>!!(S.settings.appLock&&S.settings.appLock.hash);
+const sperrMin=()=>Math.max(1,num(S.settings.appLock&&S.settings.appLock.minuten)||5);
+async function entsperren(pw){const L=S.settings.appLock;if(await pwHash(pw,L.salt)!==L.hash)return false;
+  UI.frei=true;UI.key=await aesKey(pw,unb64(L.encSalt));lastActive=Date.now();return true}
+async function sperreSetzen(pw,minuten){const salt=zufall(16),encSalt=zufall(16),hash=await pwHash(pw,salt);
+  await mutate('settings/main',d=>({...d,appLock:{salt,hash,encSalt,minuten:minuten||5}}));UI.frei=true;UI.key=await aesKey(pw,unb64(encSalt));UI.pwNeu=false}
+async function sperreAus(){await mutate('settings/main',d=>{delete d.appLock;return d});UI.key=null;UI.pwNeu=false}
+function sperren(){if(!sperreAn())return;UI.frei=false;UI.key=null;S.edit=null;$('#view').dataset.editKey='';render()}
+let lastActive=Date.now();
+['pointerdown','keydown','wheel','touchstart'].forEach(ev=>addEventListener(ev,()=>{lastActive=Date.now()},{passive:true}));
+setInterval(()=>{if(sperreAn()&&UI.frei&&Date.now()-lastActive>sperrMin()*60000)sperren()},15000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&sperreAn()&&UI.frei&&Date.now()-lastActive>sperrMin()*60000)sperren()});
+function lockScreen(){return `<div class="card stack" style="max-width:420px;margin:40px auto;gap:12px">
+  <h2>Gesperrt</h2><p class="small muted" style="margin:0">Passwort eingeben, um die Nebenkosten zu öffnen.</p>
+  <form id="lock-form" class="stack" style="gap:10px"><div class="field"><label for="lock-pw">Passwort</label><input id="lock-pw" type="password" autocomplete="current-password" required></div>
+   <div class="small" id="lock-err" style="color:var(--bad)">${esc(UI.lockErr||'')}</div><button class="btn primary">Entsperren</button></form>
+  <details><summary class="small">Passwort vergessen?</summary>
+   ${SRV.cfg?`<p class="small muted">Mit dem Passwort des Haus-Servers (Add-on „SEEN Datenbank“) lässt sich die Sperre aufheben. Danach ein neues Passwort setzen.</p>
+    <form id="lock-srv" class="stack" style="gap:8px"><input id="lock-srvpw" type="password" placeholder="Server-Passwort" autocomplete="off" required><button class="btn">Sperre mit Server-Passwort aufheben</button></form>`
+   :`<p class="small muted">Ohne Passwort kommt niemand an die Daten – auch Sie nicht. Sie können dieses Gerät leeren und danach eine Sicherung einspielen oder sich mit dem Haus-Server verbinden.</p><button class="btn danger" data-act="geraet-reset">Dieses Gerät leeren</button>`}
+  </details></div>`}
+function bindLock(){
+  const f=$('#lock-form');if(f){f.onsubmit=async ev=>{ev.preventDefault();const pw=$('#lock-pw').value;
+    if(await entsperren(pw)){UI.lockErr='';render()}else{UI.lockErr='Passwort falsch.';$('#lock-err').textContent=UI.lockErr;$('#lock-pw').select()}};setTimeout(()=>{const i=$('#lock-pw');i&&i.focus()},50)}
+  const g=$('#lock-srv');if(g)g.onsubmit=ev=>{ev.preventDefault();
+    if(SRV.cfg&&$('#lock-srvpw').value===SRV.cfg.pass){UI.frei=true;UI.key=null;UI.pwNeu=true;lastActive=Date.now();toast('Entsperrt – bitte neues Passwort setzen',5000);go('einst')}
+    else toast('Server-Passwort stimmt nicht.')};
+  const r=$('[data-act="geraet-reset"]');if(r)r.onclick=async()=>{if(!r.classList.contains('armed')){r.classList.add('armed');r.textContent='Wirklich alle Daten auf diesem Gerät löschen?';return}
+    try{IDB.db&&IDB.db.close();await new Promise(res=>{const q=indexedDB.deleteDatabase('nebenkosten');q.onsuccess=q.onerror=q.onblocked=()=>res()})}catch(e){}
+    ['nk-server','nk-letzte-sicherung','nk-exp','nk-year'].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});location.reload()};
+}
+/* Verschlüsselte Sicherung (AES-GCM, Schlüssel aus dem App-Passwort) */
+async function sicherungsText(){
+  const data={app:'nebenkosten',exportiert:new Date().toISOString(),settings:S.settings,einheiten:S.einheiten,kostenarten:S.kostenarten,belege:S.belege,jahre:S.jahre};
+  const json=JSON.stringify(data,null,2);
+  if(!(sperreAn()&&UI.key))return json;
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},UI.key,te.encode(json));
+  return JSON.stringify({app:'nebenkosten',verschluesselt:true,salt:S.settings.appLock.encSalt,iv:b64(iv),data:b64(ct)});
+}
+async function sicherungLesen(text,pw){
+  let j=JSON.parse(text);
+  if(j.verschluesselt){
+    let key=null;
+    if(pw)key=await aesKey(pw,unb64(j.salt));
+    else if(UI.key&&S.settings.appLock&&S.settings.appLock.encSalt===j.salt)key=UI.key;
+    if(!key){const e=new Error('Passwort nötig');e.code='pw';throw e}
+    try{j=JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(j.iv)},key,unb64(j.data))))}
+    catch(_){const e=new Error('Passwort falsch');e.code='pwfalsch';throw e}
+  }
+  return j;
+}
+function importPwCard(){if(!UI.importDatei)return'';return `<div class="card stack" style="gap:10px;border-color:var(--accent)"><h3 style="margin:0">Verschlüsselte Sicherung</h3>
+  <p class="small muted" style="margin:0">„${esc(UI.importDatei.name)}“ ist mit einem Passwort geschützt. Bitte das App-Passwort eingeben, das beim Sichern galt.</p>
+  <form id="imp-form" class="stack" style="gap:8px"><input id="imp-pw" type="password" autocomplete="off" required><div class="small" style="color:var(--bad)">${esc(UI.importErr||'')}</div>
+  <div class="actions"><button class="btn primary">Einspielen</button><button type="button" class="btn" data-act="imp-abbrechen">Abbrechen</button></div></form></div>`}
+async function importStarten(file,pw){
+  try{const n=await importJson(file,pw);UI.importDatei=null;UI.importErr='';
+    if(pw&&sperreAn()&&!UI.frei)await entsperren(pw).catch(()=>{});
+    toast(n+' Einträge eingespielt');render()}
+  catch(e){if(e.code==='pw'||e.code==='pwfalsch'){UI.importDatei=file;UI.importErr=e.code==='pwfalsch'?'Passwort falsch.':'';render()}
+    else{console.error(e);toast('Datei konnte nicht gelesen werden – ist es eine Nebenkosten-Sicherung?',5000)}}}
+function bindImportPw(){const f=$('#imp-form');if(f)f.onsubmit=ev=>{ev.preventDefault();importStarten(UI.importDatei,$('#imp-pw').value)};
+  const c=$('[data-act="imp-abbrechen"]');if(c)c.onclick=()=>{UI.importDatei=null;UI.importErr='';render()}}
+function sicherheitCard(){const an=sperreAn(),zeigeForm=!an||UI.pwNeu;
+  return `<div class="card"><h3>App-Sperre</h3>
+  ${an?`<p class="small" style="margin:0 0 8px">Die App-Sperre ist <b>an</b>. Sie sperrt nach ${sperrMin()} Minuten ohne Bedienung; Sicherungen werden mit dem Passwort verschlüsselt.</p>
+    <div class="actions"><button class="btn sm" data-act="jetzt-sperren">Jetzt sperren</button>${UI.pwNeu?'':'<button class="btn sm" data-act="pw-aendern">Passwort ändern</button>'}<button class="btn sm danger" data-act="sperre-aus">Sperre ausschalten</button></div>`
+   :`<p class="small muted" style="margin:0 0 8px">Mit Passwort sperren: Ohne Passwort sieht niemand Zahlen, Mieter oder Belege. Gilt für alle verbundenen Geräte (Laptop, Handy, iPad).</p>`}
+  ${zeigeForm?`<form id="pw-form" class="stack" style="gap:10px;margin-top:10px"><div class="fields">
+    <div class="field"><label for="pw1">${an?'Neues Passwort':'Passwort'} (mind. 6 Zeichen)</label><input id="pw1" type="password" autocomplete="new-password" minlength="6" required></div>
+    <div class="field"><label for="pw2">Passwort wiederholen</label><input id="pw2" type="password" autocomplete="new-password" minlength="6" required></div>
+    <div class="field"><label for="pw-min">Sperren nach … Minuten</label><input id="pw-min" inputmode="numeric" value="${sperrMin()}"></div></div>
+    <p class="small muted" style="margin:0">Passwort gut aufheben. Vergessen lässt es sich nur mit dem Server-Passwort aufheben.</p>
+    <div><button class="btn primary">${an?'Neues Passwort speichern':'App-Sperre einschalten'}</button></div></form>`:''}
+  </div>`}
+function berichtCard(){
+  const c=SRV.cfg,an=sperreAn(),l=ls.get('nk-letzte-sicherung');const tage=l?Math.floor((Date.now()-new Date(l).getTime())/864e5):null;
+  const ok=(t,d)=>`<div class="row"><span class="pill ok">OK</span><div class="grow"><div class="title" style="white-space:normal">${t}</div>${d?`<div class="small muted">${d}</div>`:''}</div></div>`;
+  const wa=(t,d)=>`<div class="row"><span class="pill warn">Hinweis</span><div class="grow"><div class="title" style="white-space:normal">${t}</div>${d?`<div class="small muted">${d}</div>`:''}</div></div>`;
+  const rows=[
+    an?ok('App-Sperre mit Passwort','Sperrt nach '+sperrMin()+' Minuten ohne Bedienung.'):wa('Keine App-Sperre','Wer das entsperrte Gerät hat, sieht alles. Unten bei „App-Sperre“ einschalten.'),
+    c?(/^https:\/\/.+\.ts\.net/i.test(c.url)?ok('Haus-Server über Tailscale','Verschlüsselte Verbindung, nicht aus dem Internet erreichbar.'):wa('Haus-Server ohne Tailscale-Adresse','Adresse sollte https://….ts.net sein.')):wa('Kein Haus-Server verbunden','Die Daten liegen nur auf diesem Gerät. Fällt es aus, hilft nur die Sicherung.'),
+    tage===null?wa('Noch keine Sicherung','Unter Datensicherung in OneDrive sichern.'):tage>30?wa('Letzte Sicherung vor '+tage+' Tagen','Bitte neu sichern.'):ok('Sicherung aktuell','Zuletzt am '+fmtDate(l)+'.'),
+    an?ok('Sicherungen verschlüsselt','Die JSON-Sicherung in OneDrive ist ohne Passwort nicht lesbar.'):wa('Sicherungen unverschlüsselt','Mit App-Sperre werden sie automatisch verschlüsselt.'),
+    UI.persist===true?ok('Gerätespeicher dauerhaft','Der Browser löscht die Daten nicht von selbst.'):wa('Gerätespeicher nicht garantiert','Der Browser könnte bei Platzmangel aufräumen – Server oder Sicherung nutzen. Als App installieren hilft.'),
+    ok('Keine Hausdaten bei GitHub','Im Repository liegt nur das Programm, keine Zahlen, Namen oder Belege.'),
+    wa('Belegfotos in OneDrive unverschlüsselt','Damit der Steuerberater sie öffnen kann. OneDrive-Konto mit Zwei-Faktor-Anmeldung schützen.'),
+    c?wa('Server-Passwort auf diesem Gerät gespeichert','Gerät selbst mit PIN/Fingerabdruck sperren.'):''
+  ].filter(Boolean);
+  return `<div class="card"><h3>Sicherheitsbericht</h3><div class="list">${rows.join('')}</div></div>`;
+}
+function bindSicherheit(){
+  const f=$('#pw-form');if(f)f.onsubmit=async ev=>{ev.preventDefault();const a=$('#pw1').value,b=$('#pw2').value;
+    if(a.length<6){toast('Mindestens 6 Zeichen.');return}if(a!==b){toast('Die beiden Passwörter sind verschieden.');return}
+    try{await sperreSetzen(a,Math.max(1,num($('#pw-min').value)||5));toast('App-Sperre ist an');render()}catch(e){dbFail(e)}};
+}
 
 async function init(){
   renderNav();safeRender();
   db=localDb;assets=localAssets;downloads=localDownloads;
   try{await IDB.open();await LocalDB.load()}catch(e){console.error(e);setConn(false,'Gerätespeicher nicht verfügbar');$('#view').innerHTML='<div class="card empty">Dieser Browser erlaubt keine Speicherung (privates Fenster?). Bitte normal öffnen.</div>';return}
   SRV.cfg=srvCfgLesen();await Ordner.load();
+  try{if(navigator.storage&&navigator.storage.persist)UI.persist=(await navigator.storage.persisted())||(await navigator.storage.persist())}catch(e){UI.persist=false}
   db.doc('settings/main').onSnapshot(s=>{S.settings=s.exists?s.data():{};markLoaded('settings')},onSnapErr);
   COLS.forEach(c=>db.collection(c).onSnapshot(q=>{
     const rows=q.docs.map(d=>({id:d.id,...d.data()}));
@@ -505,7 +615,10 @@ function render(){
   const v=$('#view');
   if(!S.ready&&db!==null){v.innerHTML='<div class="empty">Daten werden geladen …</div>';return}
   if(!db)return;
-  if(!S.einheiten.length&&!S.kostenarten.length&&!S.belege.length){v.innerHTML=startScreen();bindView();bindServer();return}
+  const lb=$('#lock-btn');if(lb)lb.hidden=!(sperreAn()&&UI.frei);
+  if(sperreAn()&&!UI.frei){$('#nav').hidden=true;v.dataset.editKey='';v.innerHTML=lockScreen();bindLock();return}
+  $('#nav').hidden=false;
+  if(!S.einheiten.length&&!S.kostenarten.length&&!S.belege.length){v.innerHTML=startScreen();bindView();bindServer();bindImportPw();return}
   if(S.edit){if($('#f-edit')&&v.dataset.editKey===JSON.stringify(S.edit))return;v.innerHTML=renderEdit();v.dataset.editKey=JSON.stringify(S.edit);bindEdit();hydrateBlobs(v);return}
   v.dataset.editKey='';
   v.innerHTML=({start:viewStart,belege:viewBelege,zaehler:viewZaehler,abrechnung:viewAbr,abschluss:viewAbschluss,einst:viewEinst}[S.tab])();
@@ -768,7 +881,9 @@ function viewEinst(){
     ${Ordner.ok()?`<button class="btn primary" data-act="ordner-sichern" ${Ordner.h?'':'disabled'}>Jetzt in OneDrive sichern</button><button class="btn" data-act="ordner-waehlen">${Ordner.h?'Ordner ändern':'OneDrive-Ordner wählen'}</button>`:''}
     <button class="btn" data-act="json">Sicherung herunterladen (JSON)</button><button class="btn" data-act="csv">Belege als CSV (Excel)</button><button class="btn" data-act="sicherung">Sicherung einspielen</button>
   </div><p class="small muted" style="margin:8px 0 0">${Ordner.ok()?(Ordner.h?`Speicherort: <b>${esc(Ordner.h.name)}</b>. Alle PDFs landen dort im Jahresordner, „Jetzt sichern“ legt die Daten unter <i>Sicherung</i> und alle Belegfotos/-PDFs unter <i>Jahr/Belege</i> ab.`:'Einmal den OneDrive-Ordner wählen (z. B. OneDrive → Haus → Nebenkosten). Danach speichert die App PDFs und Sicherungen direkt dort.'):'Auf Handy/iPad öffnet sich beim Speichern das Teilen-Menü – dort „OneDrive“ wählen.'} Letzte Sicherung: ${ls.get('nk-letzte-sicherung')?fmtDate(ls.get('nk-letzte-sicherung')):'noch keine'}.</p></div>
-  ${serverCard()}</div>`;
+  ${serverCard()}
+  ${sicherheitCard()}
+  ${berichtCard()}</div>`;
 }
 
 /* ---------- Formulare ---------- */
@@ -892,7 +1007,7 @@ function bindEdit(){
 }
 $('#import-file').addEventListener('change',async ev=>{
   const file=ev.target.files[0];ev.target.value='';if(!file)return;
-  try{const n=await importJson(file);toast(n+' Einträge eingespielt');render()}catch(e){console.error(e);toast('Datei konnte nicht gelesen werden – ist es eine Nebenkosten-Sicherung?',5000)}
+  importStarten(file);
 });
 $('#beleg-file').addEventListener('change',ev=>{const file=ev.target.files[0];ev.target.value='';if(file)dateiAnhaengen(file)});
 let scanZiel=null;
@@ -994,10 +1109,13 @@ function bindView(){
     if(a==='ordner-sichern')sicherungInOrdner();
     if(a==='neu'){await grundeinrichtung();toast('Eingerichtet – bitte Flächen prüfen');go('einst')}
     if(a==='srv-jetzt'){syncKick(true);toast('Abgleich gestartet')}
+    if(a==='jetzt-sperren')return sperren();
+    if(a==='pw-aendern'){UI.pwNeu=true;return render()}
+    if(a==='sperre-aus'){if(!t.classList.contains('armed')){t.classList.add('armed');t.textContent='Wirklich ausschalten?';return}await sperreAus();toast('App-Sperre ausgeschaltet');return render()}
     if(a==='srv-trennen'){if(!t.classList.contains('armed')){t.classList.add('armed');t.textContent='Wirklich trennen?';return}srvTrennen()}
   };
   const fl=$('#f-filter');if(fl)fl.onchange=()=>{S.filterK=fl.value;render()};
-  bindAbschluss();bindServer();
+  bindAbschluss();bindServer();bindSicherheit();bindImportPw();
   $$('[data-s]').forEach(i=>i.onchange=()=>{const d={...S.settings,[i.dataset.s]:i.value.trim()};save('settings/main',d).then(ok=>ok&&toast('Gespeichert'))});
   $$('[data-z]').forEach(i=>i.onchange=()=>{const[k,eid,f]=i.dataset.z.split('|');const v=i.value.trim()===''?'':num(i.value);const y=S.year;
     mutate('jahre/'+y,d=>{d.zaehler=d.zaehler||{};d.zaehler[k]=d.zaehler[k]||{};d.zaehler[k][eid]=d.zaehler[k][eid]||{};d.zaehler[k][eid][f]=v;return d})
@@ -1032,8 +1150,7 @@ async function sicherungInOrdner(){
   if(!Ordner.h){toast('Bitte zuerst den OneDrive-Ordner wählen.');return}
   if(!await Ordner.bereit()){toast('Kein Zugriff auf den Ordner – bitte erneut wählen.');return}
   toast('Sicherung läuft …',8000);
-  const data={exportiert:new Date().toISOString(),settings:S.settings,einheiten:S.einheiten,kostenarten:S.kostenarten,belege:S.belege,jahre:S.jahre};
-  await Ordner.schreiben('Sicherung/Nebenkosten_Sicherung_'+today()+'.json',new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  await Ordner.schreiben('Sicherung/Nebenkosten_Sicherung_'+today()+'.json',new Blob([await sicherungsText()],{type:'application/json'}));
   let n=0,fehlt=0;
   for(const b of S.belege){if(!b.foto)continue;
     const r=await IDB.get('blobs',b.foto).catch(()=>null);let blob=r&&r.blob;
@@ -1129,8 +1246,7 @@ function pdfAbschluss(){
   saveFile('Jahresabschluss_'+y+'.pdf',doc.output('blob'),String(y));
 }
 function jsonExport(){
-  const data={exportiert:new Date().toISOString(),settings:S.settings,einheiten:S.einheiten,kostenarten:S.kostenarten,belege:S.belege,jahre:S.jahre};
-  saveFile('Nebenkosten_Sicherung_'+today()+'.json',JSON.stringify(data,null,2),'Sicherung').then(ok=>{if(ok)ls.set('nk-letzte-sicherung',today())});
+  sicherungsText().then(t=>saveFile('Nebenkosten_Sicherung_'+today()+'.json',t,'Sicherung')).then(ok=>{if(ok)ls.set('nk-letzte-sicherung',today())});
 }
 function pdfExport(){
   if(!window.jspdf){toast('PDF-Bibliothek nicht geladen.');return}
