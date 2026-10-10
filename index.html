@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hüttenheim Nebenkosten</title>
+<meta name="theme-color" content="#1d5c63">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<script src="lib/jspdf.umd.min.js"></script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+/* Layout: Haushaltsbuch-App — feste Kopfzeile mit Jahreswahl, Inhalt in Karten, untere Tab-Leiste. Farbton "Schiefer-Petrol" wie ein Hausdach. */
+:root{
+  --bg:#f2f4f4; --surface:#ffffff; --surface2:#e7ecec; --fg:#17201f; --muted:#5b6968; --line:#d6dfde;
+  --accent:#1d5c63; --accent-fg:#ffffff; --accent-soft:#dcecec;
+  --ok:#2e7a4d; --ok-soft:#e1f1e7; --warn:#97600c; --warn-soft:#f7ebd4; --bad:#b1261e; --bad-soft:#f8e1df;
+  --f-display:"Bitter", Georgia, "Times New Roman", serif;
+  --f-body:"Figtree", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r:12px; --nav-h:64px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101615; --surface:#18201f; --surface2:#222c2b; --fg:#e8efee; --muted:#9fb0ae; --line:#2f3b3a;
+  --accent:#6cc0c4; --accent-fg:#0b1a1b; --accent-soft:#1d3436;
+  --ok:#6cc18c; --ok-soft:#1c3226; --warn:#e2a74c; --warn-soft:#382b16; --bad:#f08a82; --bad-soft:#3c1f1d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101615; --surface:#18201f; --surface2:#222c2b; --fg:#e8efee; --muted:#9fb0ae; --line:#2f3b3a;
+  --accent:#6cc0c4; --accent-fg:#0b1a1b; --accent-soft:#1d3436;
+  --ok:#6cc18c; --ok-soft:#1c3226; --warn:#e2a74c; --warn-soft:#382b16; --bad:#f08a82; --bad-soft:#3c1f1d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:1.3rem} h3{font-size:1.06rem}
+button,input,select,textarea{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .small{font-size:.86rem}
+.label{font-size:.74rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1100px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px;justify-content:space-between}
+.brand{font-family:var(--f-display);font-size:1.15rem;font-weight:700;color:var(--accent)}
+.brand small{display:block;font-family:var(--f-body);font-size:.74rem;color:var(--muted);font-weight:500}
+.yearsel{display:flex;align-items:center;gap:4px}
+.yearsel b{font-size:1.15rem;font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
+.status-dot{font-size:.76rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.status-dot i{width:8px;height:8px;border-radius:50%;background:var(--warn);display:inline-block}
+.status-dot.on i{background:var(--ok)}
+
+main{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:16px calc(var(--nav-h) + 32px + env(safe-area-inset-bottom,0px))}
+.view-head{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs .in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr);height:var(--nav-h)}
+.diff-up{color:var(--bad)} .diff-down{color:var(--ok)}
+td.bg input{text-align:left;min-width:180px}
+nav.tabs button{background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-size:.72rem;font-weight:600;cursor:pointer}
+nav.tabs svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+nav.tabs button[aria-current="page"]{color:var(--accent)}
+
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;min-height:44px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.danger.armed{background:var(--bad);color:var(--surface)}
+.btn.sm{min-height:36px;padding:6px 10px;font-size:.9rem}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.icon-btn{border:0;background:none;font-size:1.4rem;line-height:1;width:40px;height:40px;cursor:pointer;color:var(--muted);border-radius:10px}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.grid{display:grid;gap:14px}
+.g3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.card h3{margin-bottom:10px}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat b{font-size:1.5rem;font-variant-numeric:tabular-nums;font-weight:700}
+.stack{display:flex;flex-direction:column;gap:14px}
+
+.list{display:flex;flex-direction:column}
+.row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line);min-width:0}
+.row:last-child{border-bottom:0}
+.row.click{cursor:pointer;border-radius:8px}
+.row.click:hover{background:var(--surface2)}
+.row .grow{flex:1;min-width:0}
+.row .title{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amt{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+.pill{display:inline-block;border-radius:20px;padding:2px 10px;font-size:.78rem;font-weight:600;background:var(--surface2);color:var(--muted);white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.acc{background:var(--accent-soft);color:var(--accent)}
+.empty{padding:26px 12px;text-align:center;color:var(--muted)}
+.notice{border-radius:10px;padding:12px 14px;background:var(--warn-soft);font-size:.92rem}
+.notice.info{background:var(--accent-soft)}
+.month-h{font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;padding:14px 4px 4px}
+
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label{font-size:.85rem;font-weight:600;color:var(--muted)}
+.fields{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+input,select,textarea{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;min-height:44px}
+input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--accent)}
+textarea{min-height:70px;resize:vertical}
+.big-in{font-size:1.5rem!important;font-weight:700;font-variant-numeric:tabular-nums}
+.check{display:flex;gap:10px;align-items:center;font-size:.95rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:8px 14px;cursor:pointer;font-weight:500;min-height:40px}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+td input{min-height:38px;padding:6px 8px;text-align:right;min-width:90px}
+tfoot td{font-weight:700;border-bottom:0}
+.plus{color:var(--ok)} .minus{color:var(--bad)}
+.bar{height:10px;border-radius:6px;background:var(--surface2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.kbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center}
+.kbar .bar{grid-column:1/-1}
+
+/* Abrechnung als Schriftstück */
+.paper{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:24px 22px;max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.paper .addr{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));font-size:.92rem}
+.paper h2{font-size:1.25rem}
+.result{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;border-top:2px solid var(--fg);padding-top:12px}
+.result b{font-size:1.6rem;font-variant-numeric:tabular-nums}
+.thumb{width:84px;height:84px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:var(--surface2)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:30;font-weight:600;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head><body>
+<div id="update-bar" class="notice info" hidden style="position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:40;display:flex;gap:10px;align-items:center">Neue Version verfügbar <button class="btn sm" onclick="location.reload()">Neu laden</button></div>
+<header class="topbar"><div class="topbar-in">
+  <div class="brand">Nebenkosten<small id="objname">Hüttenheim</small></div>
+  <div class="yearsel" aria-label="Abrechnungsjahr">
+    <button class="icon-btn" id="y-prev" aria-label="Vorjahr">‹</button><b id="y-val">2026</b><button class="icon-btn" id="y-next" aria-label="Folgejahr">›</button>
+  </div>
+  <span class="status-dot" id="conn"><i></i><span>Verbinde …</span></span>
+</div></header>
+<main><div id="view"></div></main>
+<nav class="tabs" aria-label="Bereiche"><div class="in" id="nav"></div></nav>
+<input type="file" id="beleg-file" accept="image/*,application/pdf" hidden>
+<input type="file" id="import-file" accept="application/json,.json" hidden>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ---------- Helfer ---------- */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const fmtDate=s=>{if(!s)return'';const[y,m,d]=s.split('-');return d+'.'+m+'.'+y};
+const eur=n=>(Number(n)||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+const nf=(n,d=2)=>(Number(n)||0).toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:d});
+const num=v=>{if(v==null||v==='')return 0;if(typeof v==='number')return v;let s=String(v).trim().replace(/\s|€/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isFinite(n)?n:0};
+const r2=n=>Math.round(n*100)/100;
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const clone=o=>JSON.parse(JSON.stringify(o||{}));
+const MONATE=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+function toast(t,ms=2600){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,ms)}
+const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+const SCHLUESSEL={
+  flaeche:'Wohn-/Nutzfläche (m²)',
+  personen:'Personenzahl',
+  einheiten:'Je Einheit gleich',
+  verbrauch:'Verbrauch (Zähler)',
+  mix:'Verbrauch + Fläche (z. B. 70/30)',
+  mixpers:'Personen + Fläche (z. B. 60/40)',
+  direkt:'Nur direkt zugeordnet'
+};
+const TYP={vermietet:'Vermietet',gewerbe:'Gewerbe vermietet',eigen:'Eigennutzung',betrieb:'Eigener Betrieb'};
+const ohneMieter=e=>e.typ==='eigen'||e.typ==='betrieb';
+const ART35={dienst:'Haushaltsnahe Dienstleistung',handwerker:'Handwerkerleistung'};
+
+/* ---------- Zustand ---------- */
+const S={settings:{},einheiten:[],kostenarten:[],belege:[],jahre:{},ready:false,loaded:new Set(),
+  tab:'start',year:Number(ls.get('nk-year'))||new Date().getFullYear(),edit:null,filterK:'',abrE:'',canWrite:true};
+const COLS=['einheiten','kostenarten','belege','jahre'];
+let db=null,assets=null,downloads=null;
+
+/* ---------- Speicher ---------- */
+const queues={};
+function mutate(path,fn){
+  const p=(queues[path]||Promise.resolve()).then(async()=>{
+    const ref=db.doc(path);const snap=await ref.get();
+    const next=fn(snap.exists?clone(snap.data()):{});
+    await ref.set(next);return next;});
+  queues[path]=p.catch(()=>{});return p;
+}
+function dbFail(e){console.error(e);const c=e&&e.code;
+  if(c==='quota_exceeded')toast('Speicher voll – bitte unter Einstellungen eine Sicherung exportieren.',6000);
+  else if(c==='invalid_argument'||c==='permission_denied')toast('Keine Schreibrechte in dieser Ansicht.',5000);
+  else toast('Speichern fehlgeschlagen – bitte erneut versuchen.',4000);}
+async function save(path,data){if(!db){toast('Speicher nicht verbunden.');return false}try{await db.doc(path).set(data);return true}catch(e){dbFail(e);return false}}
+async function del(path){try{await db.doc(path).delete();return true}catch(e){dbFail(e);return false}}
+
+let rq=false;
+function scheduleRender(){if(rq)return;rq=true;requestAnimationFrame(()=>{rq=false;safeRender()})}
+function safeRender(){try{render()}catch(err){console.error(err);const v=$('#view');if(v)v.innerHTML='<div class="card"><h3>Anzeigefehler</h3><p class="small">Bitte Screenshot an Claude schicken:</p><pre class="small" style="white-space:pre-wrap">'+esc(err&&err.stack||err)+'</pre></div>'}}
+window.addEventListener('error',ev=>{const v=$('#view');if(v&&!v.innerHTML.includes('Anzeigefehler'))v.insertAdjacentHTML('afterbegin','<div class="notice">Fehler: '+esc(ev.message)+'</div>')});
+
+/* ================= Speicher: alles im Gerät (IndexedDB) + Abgleich mit dem eigenen Server ================= */
+const IDB={db:null,
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('nebenkosten',1);
+    r.onupgradeneeded=()=>{const d=r.result;['docs','blobs','meta'].forEach(n=>{if(!d.objectStoreNames.contains(n))d.createObjectStore(n)})};
+    r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>rej(r.error)})},
+  req(store,mode,fn){return new Promise((res,rej)=>{let t;try{t=this.db.transaction(store,mode)}catch(e){rej(e);return}
+    const rq=fn(t.objectStore(store));let out;if(rq)rq.onsuccess=()=>{out=rq.result};
+    t.oncomplete=()=>res(out);t.onerror=t.onabort=()=>{const e=t.error;rej(e&&e.name==='QuotaExceededError'?{code:'quota_exceeded'}:e)}})},
+  get(s,k){return this.req(s,'readonly',st=>st.get(k))},
+  put(s,k,v){return this.req(s,'readwrite',st=>st.put(v,k))},
+  del(s,k){return this.req(s,'readwrite',st=>st.delete(k))},
+  keys(s){return this.req(s,'readonly',st=>st.getAllKeys())},
+  all(s){return this.req(s,'readonly',st=>st.getAll())}
+};
+/* Gleiche Schnittstelle wie vorher (doc/collection/onSnapshot), Daten im Gerät */
+const LocalDB={cache:new Map(),colL:new Map(),docL:new Map(),
+  async load(){const ks=await IDB.keys('docs'),vs=await IDB.all('docs');ks.forEach((k,i)=>this.cache.set(k,vs[i]))},
+  colOf:p=>p.split('/')[0],
+  snapDoc(p){const d=this.cache.get(p);return{id:p.split('/')[1],exists:d!==undefined,data:()=>d===undefined?undefined:clone(d)}},
+  snapCol(c){return{docs:[...this.cache.keys()].filter(k=>this.colOf(k)===c).map(k=>this.snapDoc(k))}},
+  notify(p){const c=this.colOf(p);(this.docL.get(p)||[]).forEach(f=>f(this.snapDoc(p)));(this.colL.get(c)||[]).forEach(f=>f(this.snapCol(c)))},
+  async write(p,data){if(data===undefined){this.cache.delete(p);await IDB.del('docs',p)}else{this.cache.set(p,clone(data));await IDB.put('docs',p,clone(data))}this.notify(p)},
+  async applyRemote(p,data){await this.write(p,data)}
+};
+const localDb={
+  doc(p){return{
+    get:async()=>LocalDB.snapDoc(p),
+    set:async d=>{await LocalDB.write(p,d);syncMark(p)},
+    delete:async()=>{await LocalDB.write(p,undefined);syncMark(p)},
+    onSnapshot(f){const a=LocalDB.docL.get(p)||[];a.push(f);LocalDB.docL.set(p,a);setTimeout(()=>f(LocalDB.snapDoc(p)),0);return()=>{}}}},
+  collection(c){return{onSnapshot(f){const a=LocalDB.colL.get(c)||[];a.push(f);LocalDB.colL.set(c,a);setTimeout(()=>f(LocalDB.snapCol(c)),0);return()=>{}}}}
+};
+/* Belegfotos/PDFs im Gerät */
+const blobUrls=new Map();
+const localAssets={async upload(blob){const id=uid()+uid();await IDB.put('blobs',id,{blob,type:blob.type,ts:Date.now(),size:blob.size});syncMarkBlob(id,'put');return{id,contentType:blob.type||'application/octet-stream'}}};
+async function blobUrl(id){if(blobUrls.has(id))return blobUrls.get(id);let r=await IDB.get('blobs',id).catch(()=>null);
+  if(!r&&SRV.cfg){const b=await srvBlobGet(id).catch(()=>null);if(b){r={blob:b,type:b.type};await IDB.put('blobs',id,{blob:b,type:b.type,ts:Date.now(),size:b.size}).catch(()=>{})}}
+  if(!r)return null;const u=URL.createObjectURL(r.blob);blobUrls.set(id,u);return u}
+async function hydrateBlobs(root){for(const el of $$('[data-blob]',root)){const u=await blobUrl(el.dataset.blob);
+  if(!u){el.replaceWith(Object.assign(document.createElement('span'),{className:'small muted',textContent:'Datei nicht auf diesem Gerät'}));continue}
+  if(el.tagName==='IMG')el.src=u;else{el.onclick=()=>window.open(u,'_blank')}}}
+/* Datei an den Nutzer geben (Download im Browser) */
+const localDownloads={async save({filename,data}){const blob=data instanceof Blob?data:new Blob([data],{type:'text/plain;charset=utf-8'});
+  const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000);return{status:'saved'}}};
+
+/* ---------- Server: CouchDB auf dem M920q (Add-on „SEEN Datenbank“), Datenbank „nebenkosten“, über Tailscale ---------- */
+const DBNAME='nebenkosten';
+const SRV={cfg:null,seq:'0',revs:{},dirty:{},bdirty:{},status:'',running:false,pushT:null};
+function srvCfgLesen(){try{const c=JSON.parse(ls.get('nk-server')||'null');return c&&c.url?c:null}catch(_){return null}}
+const encId=id=>encodeURIComponent(id);
+function srvRaw(cfg,path,opt={}){const h={Authorization:'Basic '+btoa(unescape(encodeURIComponent(cfg.user+':'+cfg.pass))),...(opt.headers||{})};let body=opt.body;
+  if(opt.json!==undefined){h['Content-Type']='application/json';body=JSON.stringify(opt.json)}
+  return fetch(cfg.url.replace(/\/+$/,'')+'/'+DBNAME+path,{method:opt.method||'GET',headers:h,body,cache:'no-store',signal:opt.signal})}
+const srv=(path,opt)=>srvRaw(SRV.cfg,path,opt);
+async function srvBlobPut(id,blob,type){const r=await srv('/'+encId('b:'+id)+'/f',{method:'PUT',headers:{'Content-Type':type||blob.type||'application/octet-stream'},body:blob});if(!r.ok&&r.status!==409)throw new Error('Datei-Upload fehlgeschlagen ('+r.status+')')}
+async function srvBlobGet(id){const r=await srv('/'+encId('b:'+id)+'/f');if(!r.ok)return null;return await r.blob()}
+let syncSaveT=null;
+function syncPersist(){clearTimeout(syncSaveT);syncSaveT=setTimeout(()=>IDB.put('meta','sync',{seq:SRV.seq,revs:SRV.revs,dirty:SRV.dirty,bdirty:SRV.bdirty}).catch(()=>{}),400)}
+function syncMark(p){if(!SRV.cfg)return;SRV.dirty[p]=(SRV.dirty[p]||0)+1;syncPersist();syncKick()}
+function syncMarkBlob(id,what){if(!SRV.cfg)return;SRV.bdirty[id]=what==='put'?'put:'+Date.now():what;syncPersist();syncKick()}
+function syncKick(now){if(!SRV.cfg)return;clearTimeout(SRV.pushT);SRV.pushT=setTimeout(()=>syncPush().catch(syncFehler),now?50:1200)}
+function syncStatus(t,ok){SRV.status=t;if(S.ready)setConn(ok!==false,t);const e=$('#srv-status');if(e)e.textContent=t}
+function syncFehler(e){console.warn('Sync',e);syncStatus('Im Gerät gespeichert · Server gerade nicht erreichbar',false)}
+let pushing=false;
+async function syncPush(){if(pushing||!navigator.onLine)return;pushing=true;try{
+  for(const p of Object.keys(SRV.dirty)){const mark=SRV.dirty[p];const id='d:'+p;let data=LocalDB.cache.get(p);
+    for(let n=0;n<4;n++){let r;
+      if(data===undefined){if(!SRV.revs[p])break;r=await srv('/'+encId(id)+'?rev='+encodeURIComponent(SRV.revs[p]),{method:'DELETE'})}
+      else{const body={_id:id,data,ts:Date.now()};if(SRV.revs[p])body._rev=SRV.revs[p];r=await srv('/'+encId(id),{method:'PUT',json:body})}
+      if(r.ok){const j=await r.json();if(data===undefined)delete SRV.revs[p];else SRV.revs[p]=j.rev;break}
+      if(r.status===409||r.status===404){const g=await srv('/'+encId(id));if(g.ok){SRV.revs[p]=(await g.json())._rev}else{delete SRV.revs[p];if(data===undefined)break}continue}
+      if(r.status===401)throw new Error('Server: Anmeldung abgelehnt');throw new Error('HTTP '+r.status)}
+    if(SRV.dirty[p]===mark)delete SRV.dirty[p];syncPersist()}
+  for(const id of Object.keys(SRV.bdirty)){const w=SRV.bdirty[id];
+    if(w.startsWith('put:')){const r=await IDB.get('blobs',id);if(r&&r.blob)await srvBlobPut(id,r.blob,r.type)}
+    if(SRV.bdirty[id]===w)delete SRV.bdirty[id];syncPersist()}
+  syncStatus('Im Gerät gespeichert · mit Server abgeglichen ✓',true)}finally{pushing=false}}
+async function syncPull(longpoll){const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),longpoll?40000:30000);
+  try{const r=await srv('/_changes?since='+encodeURIComponent(SRV.seq)+'&include_docs=true&limit=300'+(longpoll?'&feed=longpoll&timeout=25000':''),{signal:ctl.signal});
+    if(r.status===401)throw new Error('Server: Anmeldung abgelehnt');if(!r.ok)throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    for(const ch of j.results){if(!ch.id.startsWith('d:'))continue;const p=ch.id.slice(2);
+      if(ch.deleted){delete SRV.revs[p];if(!SRV.dirty[p]&&LocalDB.cache.has(p))await LocalDB.applyRemote(p,undefined);continue}
+      const d=ch.doc;if(!d||SRV.revs[p]===d._rev)continue;SRV.revs[p]=d._rev;if(!SRV.dirty[p])await LocalDB.applyRemote(p,d.data)}
+    SRV.seq=j.last_seq;syncPersist();return{pending:j.pending||0}}
+  finally{clearTimeout(to)}}
+async function syncStart(){if(SRV.running)return;SRV.running=true;
+  const m=await IDB.get('meta','sync').catch(()=>null);if(m){SRV.seq=m.seq||'0';SRV.revs=m.revs||{};SRV.dirty=m.dirty||{};SRV.bdirty=m.bdirty||{}}
+  syncStatus('Im Gerät gespeichert · Abgleich läuft …',true);syncKick(true);
+  let fehler=0;
+  while(SRV.cfg){try{if(!navigator.onLine)throw new Error('offline');let r=await syncPull(false);while(r.pending>0)r=await syncPull(false);
+      fehler=0;if(!Object.keys(SRV.dirty).length)syncStatus('Im Gerät gespeichert · mit Server abgeglichen ✓',true);
+      while(SRV.cfg&&navigator.onLine){await syncPull(true);if(Object.keys(SRV.dirty).length+Object.keys(SRV.bdirty).length)syncKick()}}
+    catch(e){if(e&&e.name!=='AbortError'){fehler++;syncFehler(e)}await new Promise(r=>setTimeout(r,Math.min(60000,5000*Math.max(1,fehler))))}}
+  SRV.running=false}
+window.addEventListener('online',()=>syncKick(true));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncKick(true)});
+async function srvVerbinden(cfg){
+  const t=await srvRaw(cfg,'',{}).catch(e=>({ok:false,status:0,err:e}));
+  if(t.status===401)throw new Error('Benutzer oder Passwort falsch.');
+  if(t.status===404){const c=await srvRaw(cfg,'',{method:'PUT'});if(!c.ok&&c.status!==412)throw new Error('Datenbank „nebenkosten“ konnte nicht angelegt werden ('+c.status+').')}
+  else if(!t.ok)throw new Error('Server nicht erreichbar. Tailscale eingeschaltet? Adresse richtig?');
+  SRV.cfg=cfg;ls.set('nk-server',JSON.stringify(cfg));
+  SRV.seq='0';SRV.revs={};SRV.dirty={};SRV.bdirty={};
+  [...LocalDB.cache.keys()].forEach(p=>SRV.dirty[p]=1);
+  (await IDB.keys('blobs')).forEach(id=>SRV.bdirty[id]='put:0');
+  syncPersist();syncStart();
+}
+function srvTrennen(){SRV.cfg=null;ls.set('nk-server','');IDB.del('meta','sync').catch(()=>{});setConn(true,'Nur im Gerät gespeichert');render()}
+function serverCard(){const c=SRV.cfg;
+  return `<div class="card"><h3>Haus-Server (M920q, über Tailscale)</h3>
+   ${c?`<p class="small" style="margin:0 0 6px">Verbunden mit <b>${esc(c.url)}</b> · Datenbank „${DBNAME}“.</p><div class="small muted" id="srv-status">${esc(SRV.status||'')}</div>
+     <div class="actions" style="margin-top:8px"><button class="btn sm" data-act="srv-jetzt">Jetzt abgleichen</button><button class="btn sm danger" data-act="srv-trennen">Trennen</button></div>`
+   :`<p class="small muted" style="margin:0 0 10px">Damit Laptop, Handy und iPad dieselben Daten sehen. Gleicher Server wie SEEN Salon (Add-on „SEEN Datenbank“), eigene Datenbank „${DBNAME}“. Adresse, Benutzer und Passwort: Home Assistant → Einstellungen → Add-ons → SEEN Datenbank. Tailscale muss auf diesem Gerät eingeschaltet sein.</p>
+     <form id="srv-form" class="stack" style="gap:10px"><div class="fields">
+      <div class="field"><label for="srv-url">Server-Adresse</label><input id="srv-url" placeholder="https://seen-db.xxxx.ts.net" autocomplete="off" autocapitalize="off" required></div>
+      <div class="field"><label for="srv-user">Benutzer</label><input id="srv-user" value="seen" autocomplete="off" autocapitalize="off" required></div>
+      <div class="field"><label for="srv-pass">Passwort</label><input id="srv-pass" type="password" autocomplete="off" required></div></div>
+      <div class="small" id="srv-test"></div><div><button class="btn primary">Verbinden</button></div></form>`}</div>`}
+function bindServer(){
+  const f=$('#srv-form');if(f)f.onsubmit=async ev=>{ev.preventDefault();const st=$('#srv-test');st.textContent='Verbinde …';
+    try{await srvVerbinden({url:$('#srv-url').value.trim(),user:$('#srv-user').value.trim(),pass:$('#srv-pass').value});toast('Mit Server verbunden');render()}
+    catch(e){st.textContent=e.message||String(e)}};
+}
+/* Sicherung einspielen (JSON aus „Komplette Sicherung“) */
+async function importJson(file){
+  const d=JSON.parse(await file.text());let n=0;
+  const put=async(p,v)=>{await LocalDB.write(p,v);syncMark(p);n++};
+  if(d.settings)await put('settings/main',d.settings);
+  for(const c of ['einheiten','kostenarten','belege'])for(const r of (d[c]||[])){const{id,...rest}=r;if(id)await put(c+'/'+id,rest)}
+  for(const [y,v] of Object.entries(d.jahre||{})){const{id,...rest}=v;await put('jahre/'+y,rest)}
+  return n;
+}
+/* Erststart: Grundeinrichtung wie besprochen */
+async function grundeinrichtung(){
+  const E={haus1:{name:'Haus 1',typ:'vermietet',flaeche:65,personen:3,vorauszahlung:0,reihenfolge:1},haus2:{name:'Haus 2',typ:'eigen',flaeche:123,personen:4,vorauszahlung:0,reihenfolge:2},salon:{name:'Friseursalon',typ:'gewerbe',flaeche:22,personen:1,vorauszahlung:0,reihenfolge:3}};
+  const H={schluessel:'mixpers',anteilVerbrauch:35,umlagefaehig:true};
+  const K={grundsteuer:{name:'Grundsteuer',schluessel:'flaeche',umlagefaehig:true,reihenfolge:1},
+    wasserhaus1:{name:'Wasser / Abwasser Haus 1 (eigener Zähler, Gemeinde Philippsburg)',schluessel:'personen',ausgeschlossen:['haus2','salon'],umlagefaehig:true,reihenfolge:2},
+    wasser:{name:'Wasser / Abwasser Haus 2 + Salon',schluessel:'personen',ausgeschlossen:['haus1'],umlagefaehig:true,reihenfolge:2},
+    niederschlag:{name:'Niederschlagswasser',schluessel:'flaeche',umlagefaehig:true,reihenfolge:3},
+    heizung:{name:'Heizung – Wärmepumpe Strom',...H,reihenfolge:4},heizoel:{name:'Heizung – Heizöl',...H,reihenfolge:5},
+    pellets:{name:'Heizung – Pellets',...H,anteilUml:66.67,kuerzungText:'18-kW-Ofen, davon 12 kW ins Heizwasser',reihenfolge:6},
+    heizwartung:{name:'Heizung – Wartung / Inspektion',...H,p35a:'handwerker',reihenfolge:7},
+    schornstein:{name:'Heizung – Schornsteinfeger',...H,p35a:'handwerker',reihenfolge:8},
+    heizstrom:{name:'Heizung – Allgemeiner Heizungsstrom',...H,reihenfolge:9},
+    muell:{name:'Müllabfuhr',schluessel:'personen',umlagefaehig:true,reihenfolge:6},
+    allgemeinstrom:{name:'Strom / Allgemeinstrom',schluessel:'flaeche',umlagefaehig:true,reihenfolge:10},
+    hausmeister:{name:'Hausmeisterleistung',schluessel:'flaeche',umlagefaehig:true,p35a:'dienst',lohnAnteil:100,reihenfolge:11},
+    versicherung:{name:'Gebäudeversicherung',schluessel:'flaeche',umlagefaehig:true,reihenfolge:12},
+    haftpflicht:{name:'Haftpflichtversicherung',schluessel:'flaeche',umlagefaehig:true,reihenfolge:13},
+    tv:{name:'TV-Gebühr / Kabelanschluss',schluessel:'einheiten',umlagefaehig:true,reihenfolge:14},
+    reparatur:{name:'Reparaturen / Instandhaltung',schluessel:'flaeche',umlagefaehig:false,p35a:'handwerker',reihenfolge:20},
+    kredit:{name:'Kredit-Zinsen (ohne Tilgung)',schluessel:'flaeche',umlagefaehig:false,steuerTyp:'zinsen',reihenfolge:21}};
+  await localDb.doc('settings/main').set({objekt:'76661 Hüttenheim'});
+  for(const [id,v] of Object.entries(E))await localDb.doc('einheiten/'+id).set(v);
+  for(const [id,v] of Object.entries(K))await localDb.doc('kostenarten/'+id).set(v);
+}
+function startScreen(){return `<div class="card stack" style="max-width:520px;margin:24px auto;gap:14px">
+  <h2>Willkommen</h2>
+  <p class="small muted" style="margin:0">Auf diesem Gerät sind noch keine Daten. Wie möchten Sie beginnen?</p>
+  <button class="btn primary" data-act="neu">Neu einrichten (Haus 1, Haus 2, Salon und alle Kostenarten)</button>
+  <button class="btn" data-act="sicherung">Sicherung einspielen (JSON-Datei)</button>
+  ${serverCard()}</div>`}
+
+async function init(){
+  renderNav();safeRender();
+  db=localDb;assets=localAssets;downloads=localDownloads;
+  try{await IDB.open();await LocalDB.load()}catch(e){console.error(e);setConn(false,'Gerätespeicher nicht verfügbar');$('#view').innerHTML='<div class="card empty">Dieser Browser erlaubt keine Speicherung (privates Fenster?). Bitte normal öffnen.</div>';return}
+  SRV.cfg=srvCfgLesen();
+  db.doc('settings/main').onSnapshot(s=>{S.settings=s.exists?s.data():{};markLoaded('settings')},onSnapErr);
+  COLS.forEach(c=>db.collection(c).onSnapshot(q=>{
+    const rows=q.docs.map(d=>({id:d.id,...d.data()}));
+    if(c==='jahre'){S.jahre={};rows.forEach(r=>S.jahre[r.id]=r)}
+    else S[c]=rows;
+    markLoaded(c)},onSnapErr));
+  if(SRV.cfg)syncStart();
+  if('serviceWorker' in navigator){try{const reg=await navigator.serviceWorker.register('sw.js');
+    reg.addEventListener('updatefound',()=>{const w=reg.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)$('#update-bar').hidden=false})})}catch(e){console.warn(e)}}
+}
+function markLoaded(c){S.loaded.add(c);if(S.loaded.size===COLS.length+1&&!S.ready){S.ready=true;setConn(true,SRV.cfg?(SRV.status||'Im Gerät gespeichert · Abgleich läuft …'):'Nur im Gerät gespeichert')}scheduleRender()}
+function onSnapErr(e){console.error(e);setConn(false,'Fehler beim Laden')}
+function setConn(on,txt){const c=$('#conn');c.classList.toggle('on',on);c.querySelector('span').textContent=txt}
+
+/* ---------- Daten-Zugriff ---------- */
+const einheiten=()=>[...S.einheiten].filter(e=>!e.archiv).sort((a,b)=>(a.reihenfolge||0)-(b.reihenfolge||0)||String(a.name).localeCompare(b.name));
+const kostenarten=()=>[...S.kostenarten].sort((a,b)=>(a.reihenfolge||0)-(b.reihenfolge||0)||String(a.name).localeCompare(b.name));
+const kById=id=>S.kostenarten.find(k=>k.id===id);
+const eById=id=>S.einheiten.find(e=>e.id===id);
+const jahr=y=>S.jahre[String(y)]||{};
+const belegJahr=b=>Number(b.abrJahr)||Number(String(b.datum).slice(0,4));
+const belegeJahr=y=>S.belege.filter(b=>belegJahr(b)===y);
+const ejahr=(y,e)=>{const j=jahr(y).einheiten||{};return j[e.id]||{}};
+const monateVon=(y,e)=>{const v=ejahr(y,e).monate;return v===undefined||v===''?12:num(v)};
+const personenVon=(y,e)=>{const v=ejahr(y,e).personen;return v===undefined||v===''?num(e.personen):num(v)};
+const vzMonat=(y,e)=>{const v=ejahr(y,e).vz;return v===undefined||v===''?num(e.vorauszahlung):num(v)};
+const vzSumme=(y,e)=>{const g=ejahr(y,e).gezahlt;if(g!==undefined&&g!=='')return num(g);return r2(vzMonat(y,e)*monateVon(y,e))};
+const mieteMonat=e=>num(e.miete);
+const mieteSumme=(y,e)=>{const g=ejahr(y,e).mieteGezahlt;if(g!==undefined&&g!=='')return num(g);return r2(mieteMonat(e)*monateVon(y,e))};
+const usesZaehler=k=>k.schluessel==='verbrauch'||k.schluessel==='mix';
+function verbrauch(y,kId,eId){const z=((jahr(y).zaehler||{})[kId]||{})[eId];if(!z)return null;
+  if(z.verbrauch!==undefined&&z.verbrauch!=='')return num(z.verbrauch);
+  if((z.a===undefined||z.a==='')||(z.e===undefined||z.e===''))return null;return Math.max(0,num(z.e)-num(z.a))}
+
+/* ---------- Berechnung ---------- */
+function umlAnteil(k){if(k.umlagefaehig===false)return 0;const v=k.anteilUml;return Math.min(100,Math.max(0,v===undefined||v===''?100:num(v)))/100}
+function teilnehmer(k){return einheiten().filter(e=>!(k.ausgeschlossen||[]).includes(e.id))}
+function gewichte(y,k){
+  const tn=teilnehmer(k);const zeit=e=>monateVon(y,e)/12;
+  const fl=e=>num(e.flaeche)*zeit(e);
+  const mk=(f,txt)=>{const w={};let s=0;tn.forEach(e=>{w[e.id]=Math.max(0,f(e));s+=w[e.id]});return{w,s,txt}};
+  let res,hinweis='';
+  switch(k.schluessel){
+    case 'personen':res=mk(e=>personenVon(y,e)*zeit(e),e=>nf(personenVon(y,e),1)+' Pers.');break;
+    case 'einheiten':res=mk(e=>zeit(e),()=>'1 Einheit');break;
+    case 'verbrauch':{
+      res=mk(e=>verbrauch(y,k.id,e.id)||0,e=>nf(verbrauch(y,k.id,e.id)||0)+' '+(k.einheit||''));
+      if(res.s===0){res=mk(fl,e=>nf(num(e.flaeche))+' m²');hinweis='Keine Zählerstände – nach Fläche verteilt'}
+      break}
+    case 'mix':{
+      const p=Math.min(100,Math.max(0,num(k.anteilVerbrauch||70)))/100;
+      const v=mk(e=>verbrauch(y,k.id,e.id)||0,null);const f=mk(fl,null);
+      if(v.s===0){res=mk(fl,e=>nf(num(e.flaeche))+' m²');hinweis='Keine Zählerstände – nach Fläche verteilt'}
+      else{const w={};tn.forEach(e=>{w[e.id]=p*(v.w[e.id]/v.s)+(f.s?(1-p)*(f.w[e.id]/f.s):0)});
+        res={w,s:1,txt:e=>nf(verbrauch(y,k.id,e.id)||0)+' '+(k.einheit||'')+' / '+nf(num(e.flaeche))+' m²'}}
+      break}
+    case 'mixpers':{
+      const p=Math.min(100,Math.max(0,num(k.anteilVerbrauch||60)))/100;
+      const v=mk(e=>personenVon(y,e)*zeit(e),null);const f=mk(fl,null);
+      const w={};tn.forEach(e=>{w[e.id]=(v.s?p*(v.w[e.id]/v.s):0)+(f.s?(1-p)*(f.w[e.id]/f.s):0)});
+      res={w,s:Object.values(w).reduce((a,b)=>a+b,0),txt:e=>nf(personenVon(y,e),1)+' von '+nf(v.s?tn.reduce((s,x)=>s+personenVon(y,x),0):0,1)+' Pers. / '+nf(num(e.flaeche))+' von '+nf(tn.reduce((s,x)=>s+num(x.flaeche),0))+' m²'};
+      break}
+    case 'direkt':res={w:{},s:0,txt:()=>''};break;
+    default:res=mk(fl,e=>nf(num(e.flaeche))+' m²');
+  }
+  if(k.schluessel!=='direkt'&&res.s===0&&tn.length){res=mk(e=>zeit(e),()=>'1 Einheit');hinweis='Keine Werte – gleichmäßig verteilt'}
+  res.hinweis=hinweis;return res;
+}
+function abrechnung(y){
+  const bel=belegeJahr(y);
+  const out={summeUml:0,summeNicht:0,proK:{},einheiten:{},direktOhne:0};
+  einheiten().forEach(e=>out.einheiten[e.id]={posten:[],summe:0});
+  kostenarten().forEach(k=>{
+    const bk=bel.filter(b=>b.kostenart===k.id);
+    const gesamt=r2(bk.reduce((s,b)=>s+num(b.betrag),0));
+    out.proK[k.id]={gesamt,anzahl:bk.length};
+    if(k.umlagefaehig===false){out.summeNicht+=gesamt;return}
+    const p=umlAnteil(k);const uml=r2(gesamt*p);
+    out.summeUml+=uml;out.summeNicht+=r2(gesamt-uml);out.proK[k.id].uml=uml;
+    const kTxt=p<1?'Umlagefähig '+nf(p*100,2)+' % von '+eur(gesamt)+(k.kuerzungText?' ('+k.kuerzungText+')':'')+'; ':'';
+    const direkt=bk.filter(b=>b.einheit&&out.einheiten[b.einheit]);
+    const verteil=r2(bk.filter(b=>!(b.einheit&&out.einheiten[b.einheit])).reduce((s,b)=>s+num(b.betrag),0)*p);
+    direkt.forEach(b=>{const E=out.einheiten[b.einheit];const bb=r2(num(b.betrag)*p);E.posten.push({k,name:k.name+(b.text?' – '+b.text:''),gesamt:bb,schluessel:kTxt+'direkt zugeordnet',anteilTxt:'100 %',betrag:bb,direkt:true})});
+    if(verteil){
+      const g=gewichte(y,k);out.proK[k.id].hinweis=g.hinweis;
+      if(k.schluessel==='direkt'||g.s===0){out.direktOhne+=verteil;out.proK[k.id].hinweis='Ohne Zuordnung – bitte Einheit wählen'}
+      else{
+        const tn=teilnehmer(k);const ges=tn.map(e=>g.txt?g.txt(e):'');
+        const sumTxt=k.schluessel==='flaeche'?nf(tn.reduce((s,e)=>s+num(e.flaeche),0))+' m²':k.schluessel==='personen'?nf(tn.reduce((s,e)=>s+personenVon(y,e),0),1)+' Pers.':k.schluessel==='einheiten'?tn.length+' Einheiten':k.schluessel==='verbrauch'&&!g.hinweis?nf(tn.reduce((s,e)=>s+(verbrauch(y,k.id,e.id)||0),0))+' '+(k.einheit||''):'';
+        tn.forEach((e,i)=>{const anteil=g.w[e.id]/g.s;const betrag=r2(verteil*anteil);
+          out.einheiten[e.id].posten.push({k,name:k.name,gesamt:verteil,schluessel:kTxt+(k.schluessel==='mix'?'Verbrauch '+nf(k.anteilVerbrauch||70,0)+' % / Fläche '+nf(100-num(k.anteilVerbrauch||70),0)+' %':k.schluessel==='mixpers'?'Personen '+nf(k.anteilVerbrauch||60,0)+' % / Fläche '+nf(100-num(k.anteilVerbrauch||60),0)+' %':SCHLUESSEL[k.schluessel]),
+            anteilTxt:ges[i]+(sumTxt?' von '+sumTxt:'')+' = '+nf(anteil*100,2)+' %',betrag,hinweis:g.hinweis})});
+      }
+    }
+  });
+  einheiten().forEach(e=>{const E=out.einheiten[e.id];E.summe=r2(E.posten.reduce((s,p)=>s+p.betrag,0));E.vz=vzSumme(y,e);E.saldo=r2(E.summe-E.vz)});
+  out.summeUml=r2(out.summeUml);out.summeNicht=r2(out.summeNicht);
+  return out;
+}
+
+/* ---------- Navigation ---------- */
+const ICONS={
+  start:'<svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>',
+  belege:'<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
+  zaehler:'<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-4"/><path d="M9 3h6"/></svg>',
+  abrechnung:'<svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></svg>',
+  abschluss:'<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>',
+  einst:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.7 4.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>'
+};
+const TABS=[['start','Übersicht'],['belege','Belege'],['zaehler','Zähler'],['abrechnung','Abrechnung'],['abschluss','Abschluss'],['einst','Einstellung']];
+function renderNav(){$('#nav').innerHTML=TABS.map(([id,l])=>`<button data-tab="${id}" ${S.tab===id?'aria-current="page"':''}>${ICONS[id]}<span>${l}</span></button>`).join('')}
+function go(tab){S.tab=tab;S.edit=null;renderNav();render();window.scrollTo(0,0)}
+$('#nav').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)go(b.dataset.tab)});
+$('#y-prev').onclick=()=>setYear(S.year-1);$('#y-next').onclick=()=>setYear(S.year+1);
+function setYear(y){S.year=y;ls.set('nk-year',y);render()}
+
+/* ---------- Render ---------- */
+function render(){
+  $('#y-val').textContent=S.year;
+  $('#objname').textContent=S.settings.objekt||'Hüttenheim';
+  const v=$('#view');
+  if(!S.ready&&db!==null){v.innerHTML='<div class="empty">Daten werden geladen …</div>';return}
+  if(!db)return;
+  if(!S.einheiten.length&&!S.kostenarten.length&&!S.belege.length){v.innerHTML=startScreen();bindView();bindServer();return}
+  if(S.edit){v.innerHTML=renderEdit();bindEdit();hydrateBlobs(v);return}
+  v.innerHTML=({start:viewStart,belege:viewBelege,zaehler:viewZaehler,abrechnung:viewAbr,abschluss:viewAbschluss,einst:viewEinst}[S.tab])();
+  bindView();
+}
+
+/* Übersicht */
+function viewStart(){
+  const y=S.year,A=abrechnung(y),E=einheiten(),K=kostenarten();
+  const warn=[];
+  E.forEach(e=>{if(!num(e.flaeche))warn.push(`Für <b>${esc(e.name)}</b> fehlt die Fläche.`)});
+  K.filter(usesZaehler).forEach(k=>{if(A.proK[k.id]?.gesamt&&E.some(e=>verbrauch(y,k.id,e.id)===null))warn.push(`Zählerstände für <b>${esc(k.name)}</b> ${y} unvollständig.`)});
+  if(A.direktOhne)warn.push(`${eur(A.direktOhne)} sind keiner Einheit zugeordnet (Schlüssel „direkt“).`);
+  const max=Math.max(1,...K.map(k=>A.proK[k.id]?.gesamt||0));
+  return `
+  <div class="view-head"><h2>Jahr ${y}</h2><div class="actions"><button class="btn primary" data-act="new-beleg">+ Beleg</button></div></div>
+  <div class="stack">
+  <div class="grid g3">
+    <div class="card stat"><span class="label">Umlagefähige Kosten</span><b>${eur(A.summeUml)}</b><span class="small muted">${belegeJahr(y).length} Belege</span></div>
+    <div class="card stat"><span class="label">Nicht umlagefähig</span><b>${eur(A.summeNicht)}</b><span class="small muted">Reparaturen, Kredit u. a.</span></div>
+    <div class="card stat"><span class="label">Hauskosten gesamt</span><b>${eur(A.summeUml+A.summeNicht)}</b><span class="small muted">${eur((A.summeUml+A.summeNicht)/12)} pro Monat</span></div>
+  </div>
+  ${warn.length?`<div class="notice">${warn.map(w=>'<div>'+w+'</div>').join('')}</div>`:''}
+  ${!E.length?`<div class="card empty">Noch keine Einheiten angelegt. <button class="btn sm" data-tab-go="einst">Einheiten anlegen</button></div>`:''}
+  <div class="grid g3">${E.map(e=>{const R=A.einheiten[e.id];const eigen=ohneMieter(e);
+    return `<div class="card row click" data-abr="${e.id}" style="flex-direction:column;align-items:stretch;gap:6px">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3 style="margin:0">${esc(e.name)}</h3><span class="pill ${eigen?'':'acc'}">${TYP[e.typ]||''}</span></div>
+      <div class="small muted">${nf(num(e.flaeche))} m² · ${esc(e.mieter||(eigen?'Eigentümer':'—'))}</div>
+      <div style="display:flex;justify-content:space-between"><span class="muted">Kostenanteil</span><span class="amt">${eur(R.summe)}</span></div>
+      ${eigen?'':`<div style="display:flex;justify-content:space-between"><span class="muted">Vorauszahlungen</span><span class="amt">${eur(R.vz)}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><span class="pill ${R.saldo>0?'bad':'ok'}">${R.saldo>0?'Nachzahlung':'Guthaben'}</span><span class="amt ${R.saldo>0?'minus':'plus'}">${eur(Math.abs(R.saldo))}</span></div>`}
+    </div>`}).join('')}</div>
+  <div class="card"><h3>Kosten nach Art ${y}</h3>
+    ${K.length?`<div class="stack" style="gap:10px">${K.filter(k=>A.proK[k.id]?.gesamt).map(k=>`<div class="kbar"><span>${esc(k.name)} ${k.umlagefaehig===false?'<span class="pill">nicht umlagefähig</span>':''}</span><span class="amt">${eur(A.proK[k.id].gesamt)}</span><div class="bar"><i style="width:${(A.proK[k.id].gesamt/max*100).toFixed(1)}%"></i></div></div>`).join('')||'<div class="empty">Für '+y+' sind noch keine Belege erfasst.</div>'}</div>`:'<div class="empty">Noch keine Kostenarten.</div>'}
+  </div></div>`;
+}
+
+/* Belege */
+function viewBelege(){
+  const y=S.year;let B=belegeJahr(y);if(S.filterK)B=B.filter(b=>b.kostenart===S.filterK);
+  B.sort((a,b)=>String(b.datum).localeCompare(String(a.datum)));
+  const sum=B.reduce((s,b)=>s+num(b.betrag),0);
+  let lastM='';
+  return `<div class="view-head"><h2>Belege ${y}</h2><div class="actions"><button class="btn primary" data-act="new-beleg">+ Beleg</button></div></div>
+  <div class="stack">
+  <div class="field" style="max-width:360px"><label for="f-filter">Kostenart</label><select id="f-filter"><option value="">Alle Kostenarten</option>${kostenarten().map(k=>`<option value="${k.id}" ${S.filterK===k.id?'selected':''}>${esc(k.name)}</option>`).join('')}</select></div>
+  <div class="card"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="label">${B.length} Belege</span><span class="amt">${eur(sum)}</span></div>
+  <div class="list">${B.map(b=>{const m=String(b.datum).slice(0,7);let h='';if(m!==lastM){lastM=m;const[yy,mm]=m.split('-');h=`<div class="month-h">${MONATE[Number(mm)-1]||''} ${yy}</div>`}
+    const k=kById(b.kostenart),e=b.einheit?eById(b.einheit):null;
+    return h+`<div class="row click" data-beleg="${b.id}"><div class="grow"><div class="title">${esc(b.text||k?.name||'Beleg')}</div><div class="small muted">${fmtDate(b.datum)} · ${esc(k?.name||'ohne Kostenart')}${e?' · nur '+esc(e.name):''}${b.abrJahr&&Number(String(b.datum).slice(0,4))!==Number(b.abrJahr)?' · zählt für '+b.abrJahr:''}${b.foto?' · 📎':''}</div></div><span class="amt">${eur(b.betrag)}</span></div>`}).join('')||`<div class="empty">Keine Belege für ${y}. Mit „+ Beleg“ die erste Rechnung erfassen.</div>`}</div></div></div>`;
+}
+
+/* Zähler & Zahlungen */
+function viewZaehler(){
+  const y=S.year,E=einheiten(),KZ=kostenarten().filter(usesZaehler);
+  const ro=S.canWrite?'':'disabled';
+  const val=(v)=>v===undefined||v===null?'':String(v).replace('.',',');
+  return `<div class="view-head"><h2>Zähler & Zahlungen ${y}</h2></div><div class="stack">
+  ${KZ.map(k=>{const z=(jahr(y).zaehler||{})[k.id]||{};let tot=0;
+    return `<div class="card"><h3>${esc(k.name)} <span class="muted small">(${esc(k.einheit||'Einheit')})</span></h3>
+    <div class="table-wrap"><table><thead><tr><th>Einheit</th><th class="num">Stand Anfang</th><th class="num">Stand Ende</th><th class="num">Verbrauch</th></tr></thead><tbody>
+    ${teilnehmer(k).map(e=>{const r=z[e.id]||{};const v=verbrauch(y,k.id,e.id);tot+=v||0;
+      return `<tr><td>${esc(e.name)}</td><td class="num"><input inputmode="decimal" id="z-${k.id}-${e.id}-a" data-z="${k.id}|${e.id}|a" value="${val(r.a)}" ${ro}></td><td class="num"><input inputmode="decimal" id="z-${k.id}-${e.id}-e" data-z="${k.id}|${e.id}|e" value="${val(r.e)}" ${ro}></td><td class="num">${v===null?'<span class="muted">–</span>':nf(v)}</td></tr>`}).join('')}
+    </tbody><tfoot><tr><td colspan="3">Summe</td><td class="num">${nf(tot)} ${esc(k.einheit||'')}</td></tr></tfoot></table></div>
+    <p class="small muted" style="margin:8px 0 0">Endstand ${y} wird automatisch Anfangsstand ${y+1}, wenn dort noch leer.</p></div>`}).join('')||'<div class="card empty">Keine Kostenart mit Zählerverteilung. Unter Einstellung beim Schlüssel „Verbrauch“ wählen.</div>'}
+  <div class="card"><h3>Vorauszahlungen & Belegung ${y}</h3>
+    <div class="table-wrap"><table><thead><tr><th>Einheit</th><th class="num">NK monatlich €</th><th class="num">Monate</th><th class="num">Personen</th><th class="num">NK gezahlt gesamt €</th><th class="num">Kaltmiete erhalten €</th></tr></thead><tbody>
+    ${E.map(e=>{const r=ejahr(y,e);return `<tr><td>${esc(e.name)}<div class="small muted">${TYP[e.typ]||''}</div></td>
+      <td class="num"><input inputmode="decimal" id="j-${e.id}-vz" data-j="${e.id}|vz" placeholder="${nf(num(e.vorauszahlung))}" value="${val(r.vz)}" ${ro}></td>
+      <td class="num"><input inputmode="numeric" id="j-${e.id}-monate" data-j="${e.id}|monate" placeholder="12" value="${val(r.monate)}" ${ro}></td>
+      <td class="num"><input inputmode="decimal" id="j-${e.id}-personen" data-j="${e.id}|personen" placeholder="${nf(num(e.personen),1)}" value="${val(r.personen)}" ${ro}></td>
+      <td class="num"><input inputmode="decimal" id="j-${e.id}-gezahlt" data-j="${e.id}|gezahlt" placeholder="${nf(vzMonat(y,e)*monateVon(y,e))}" value="${val(r.gezahlt)}" ${ro}></td>
+      <td class="num">${ohneMieter(e)?'<span class="muted">–</span>':`<input inputmode="decimal" id="j-${e.id}-miete" data-j="${e.id}|mieteGezahlt" placeholder="${nf(mieteMonat(e)*monateVon(y,e))}" value="${val(r.mieteGezahlt)}" ${ro}>`}</td></tr>`}).join('')}
+    </tbody></table></div>
+    <p class="small muted" style="margin:8px 0 0">Leere Felder nehmen die Standardwerte der Einheit. „Monate“ unter 12 bei Ein- oder Auszug im Jahr. „Gezahlt gesamt“ nur ausfüllen, wenn tatsächlich anders gezahlt wurde.</p>
+  </div></div>`;
+}
+
+/* Abrechnung */
+function viewAbr(){
+  const y=S.year,E=einheiten();if(!E.length)return '<div class="card empty">Noch keine Einheiten.</div>';
+  if(!S.abrE||!eById(S.abrE))S.abrE=(E.find(e=>!ohneMieter(e))||E[0]).id;
+  const e=eById(S.abrE),A=abrechnung(y),R=A.einheiten[e.id],st=S.settings;
+  const eigen=ohneMieter(e);
+  return `<div class="view-head"><h2>Abrechnung ${y}</h2><div class="actions">${downloads?`<button class="btn primary" data-act="pdf">PDF speichern</button>`:''}</div></div>
+  <div class="stack">
+  <div class="chips">${E.map(x=>`<button class="chip" data-abr-sel="${x.id}" aria-pressed="${x.id===e.id}">${esc(x.name)}</button>`).join('')}</div>
+  <div class="paper">
+    <div class="addr"><div><span class="label">Vermieter</span><div>${esc(st.vermieter||'Name Vermieter')}<br>${esc(st.adresse||'Adresse')}</div></div>
+      <div><span class="label">${eigen?'Nutzer':'Mieter'}</span><div>${esc(e.mieter||(eigen?'Eigennutzung':'—'))}<br>${esc(e.name)}${e.adresse?'<br>'+esc(e.adresse):''}</div></div></div>
+    <div><h2>Betriebskostenabrechnung ${y}</h2><div class="small muted">Abrechnungszeitraum 01.01.${y} – 31.12.${y} · ${esc(st.objekt||'')}${monateVon(y,e)<12?' · Nutzungsdauer '+nf(monateVon(y,e),1)+' Monate':''} · Fläche ${nf(num(e.flaeche))} m²</div></div>
+    <div class="table-wrap"><table><thead><tr><th>Kostenart</th><th class="num">Gesamtkosten</th><th>Verteilung</th><th class="num">Ihr Anteil</th></tr></thead><tbody>
+    ${R.posten.map(p=>`<tr><td>${esc(p.name)}</td><td class="num">${eur(p.gesamt)}</td><td class="small">${esc(p.schluessel)}<br><span class="muted">${esc(p.anteilTxt)}</span>${p.hinweis?`<br><span class="pill warn">${esc(p.hinweis)}</span>`:''}</td><td class="num">${eur(p.betrag)}</td></tr>`).join('')||`<tr><td colspan="4" class="empty">Für ${y} gibt es noch keine umlagefähigen Kosten.</td></tr>`}
+    </tbody><tfoot><tr><td colspan="3">Summe Ihrer Kosten</td><td class="num">${eur(R.summe)}</td></tr>
+    ${eigen?'':`<tr><td colspan="3" style="font-weight:500">abzüglich Vorauszahlungen (${nf(monateVon(y,e),1)} × ${eur(vzMonat(y,e))}${ejahr(y,e).gezahlt!==undefined&&ejahr(y,e).gezahlt!==''?', tatsächlich gezahlt':''})</td><td class="num" style="font-weight:500">− ${eur(R.vz)}</td></tr>`}</tfoot></table></div>
+    ${eigen?`<div class="result"><span>Eigenanteil ${y}</span><b>${eur(R.summe)}</b></div>`:`
+    <div class="result"><span>${R.saldo>0?'Nachzahlung':'Guthaben'}</span><b class="${R.saldo>0?'minus':'plus'}">${eur(Math.abs(R.saldo))}</b></div>
+    <p class="small" style="margin:0">${R.saldo>0?`Bitte überweisen Sie den Betrag ${st.frist?'bis '+esc(st.frist):'innerhalb von 30 Tagen'}${st.iban?' auf das Konto '+esc(st.iban):''}.`:'Das Guthaben wird Ihnen erstattet oder mit der nächsten Miete verrechnet.'}
+    Belege können nach Absprache eingesehen werden.</p>
+    ${R.saldo>0?`<p class="small muted" style="margin:0">Vorschlag neue Vorauszahlung: ${eur(Math.ceil(R.summe/12))} monatlich.</p>`:''}
+    ${(()=>{const P=p35(y)[e.id];if(!P||!P.posten.length)return '';return `<div class="small"><b>Bescheinigung nach §35a EStG</b> – in Ihren Kosten enthaltene Arbeitskosten:<br>${P.posten.map(p=>esc(p.name)+' ('+ART35[p.art]+'): '+eur(p.v)).join('<br>')}</div>`})()}`}
+  </div></div>`;
+}
+
+/* Jahresabschluss */
+function aufteilung(y,A){
+  A=A||abrechnung(y);const E=einheiten();const totFl=E.reduce((s,e)=>s+num(e.flaeche),0);
+  const nicht={},zinsen={};E.forEach(e=>{nicht[e.id]=0;zinsen[e.id]=0});
+  belegeJahr(y).forEach(b=>{const k=kById(b.kostenart);if(!k)return;const rest=num(b.betrag)*(1-umlAnteil(k));if(!rest)return;
+    const add=(id,v)=>{nicht[id]+=v;if(k.steuerTyp==='zinsen')zinsen[id]+=v};
+    if(b.einheit&&nicht[b.einheit]!==undefined)add(b.einheit,rest);
+    else E.forEach(e=>add(e.id,totFl?rest*num(e.flaeche)/totFl:rest/E.length))});
+  const P35=p35(y);
+  const rows=E.map(e=>{const R=A.einheiten[e.id];const eigen=ohneMieter(e);const j=ejahr(y,e);
+    const miete=eigen?0:mieteSumme(y,e),vz=eigen?0:R.vz;
+    const kosten=r2(R.summe+nicht[e.id]);
+    const afa=j.afa!==undefined&&j.afa!==''?num(j.afa):afaJahr(y,e);
+    const sonder=num(j.sonderAfa),sonst=num(j.sonstigeWK);
+    const einnahmen=r2(miete+vz);
+    return{e,eigen,betrieb:e.typ==='betrieb',miete,vz,einnahmen,uml:R.summe,nicht:r2(nicht[e.id]),zinsen:r2(zinsen[e.id]),kosten,
+      saldo:eigen?0:R.saldo,ergebnis:eigen?-kosten:r2(einnahmen-kosten),afa,afaAuto:afaJahr(y,e),afaManuell:j.afa!==undefined&&j.afa!=='',sonder,sonst,
+      nachAfa:r2(einnahmen-kosten-afa-sonder-sonst),p35:P35[e.id]}});
+  return{rows};
+}
+function afaJahr(y,e){
+  const b=num(e.afaBasis),s=num(e.afaSatz);if(!b||!s||!e.afaAb)return 0;
+  const [ay,am]=String(e.afaAb).split('-').map(Number);if(!ay||y<ay)return 0;
+  const voll=b*s/100,erst=voll*(13-(am||1))/12;
+  let bisher=0;for(let j=ay;j<y;j++)bisher+=j===ay?erst:voll;
+  return r2(Math.max(0,Math.min(y===ay?erst:voll,b-bisher)));
+}
+function lohnVon(b,k){if(b.lohn!==undefined&&b.lohn!=='')return num(b.lohn);return num(b.betrag)*num(k.lohnAnteil)/100}
+function p35(y){
+  const E=einheiten(),totFl=E.reduce((s,e)=>s+num(e.flaeche),0),out={};
+  E.forEach(e=>out[e.id]={dienst:0,handwerker:0,dienstUml:0,handwerkerUml:0,posten:[]});
+  belegeJahr(y).forEach(b=>{const k=kById(b.kostenart);if(!k||!k.p35a)return;const lohn=lohnVon(b,k);if(!lohn)return;
+    const p=umlAnteil(k),umlL=lohn*p,restL=lohn-umlL;
+    const add=(id,v,uml)=>{if(!out[id]||!v)return;out[id][k.p35a]+=v;if(uml){out[id][k.p35a+'Uml']+=v;const P=out[id].posten.find(x=>x.k===k.id);if(P)P.v+=v;else out[id].posten.push({k:k.id,name:k.name,art:k.p35a,v})}};
+    if(umlL){if(b.einheit&&out[b.einheit])add(b.einheit,umlL,true);
+      else if(k.schluessel!=='direkt'){const g=gewichte(y,k);if(g.s>0)teilnehmer(k).forEach(e=>add(e.id,umlL*g.w[e.id]/g.s,true))}}
+    if(restL){if(b.einheit&&out[b.einheit])add(b.einheit,restL,false);else E.forEach(e=>add(e.id,totFl?restL*num(e.flaeche)/totFl:restL/E.length,false))}
+  });
+  Object.values(out).forEach(o=>{['dienst','handwerker','dienstUml','handwerkerUml'].forEach(f=>o[f]=r2(o[f]));o.posten.forEach(p=>p.v=r2(p.v))});
+  return out;
+}
+function vergleich(y){
+  const A=abrechnung(y),P=abrechnung(y-1);const bg=jahr(y).begruendung||{};
+  const rows=kostenarten().map(k=>{const a=A.proK[k.id]?.gesamt||0,p=P.proK[k.id]?.gesamt||0;
+    return{k,a,p,d:r2(a-p),pct:p?(a-p)/p*100:null,bg:bg[k.id]||''}}).filter(r=>r.a||r.p);
+  const ta=r2(rows.reduce((s,r)=>s+r.a,0)),tp=r2(rows.reduce((s,r)=>s+r.p,0));
+  return{rows,ta,tp,td:r2(ta-tp),tpct:tp?(ta-tp)/tp*100:null};
+}
+const pctTxt=p=>p===null?'neu':(p>0?'+':'')+nf(p,1)+' %';
+const EXP_SEK=[['verg','Vorjahresvergleich mit Begründung'],['einheiten','Einnahmen und Kosten je Einheit'],['steuer','Steuerdaten (AfA, Zinsen, Werbungskosten)'],['p35','§35a Handwerker / Dienstleistungen'],['belege','Belegliste'],['notiz','Notiz an Steuerberater']];
+function expWahl(){let w=null;try{w=JSON.parse(ls.get('nk-exp')||'null')}catch(e){}
+  w=w||{};w.sek=w.sek||Object.fromEntries(EXP_SEK.map(([k])=>[k,true]));w.einh=w.einh||{};return w}
+function viewAbschluss(){
+  const y=S.year,V=vergleich(y),{rows}=aufteilung(y),ro=S.canWrite?'':'disabled',W=expWahl();
+  const offen=V.rows.filter(r=>r.pct!==null&&Math.abs(r.pct)>=10&&!r.bg).length;
+  const val=v=>v===undefined||v===null?'':String(v).replace('.',',');
+  const col=f=>rows.map(f).join('');
+  return `<div class="view-head"><h2>Jahresabschluss ${y}</h2></div>
+  <div class="stack">
+  <div class="grid g3">
+    <div class="card stat"><span class="label">Kosten ${y}</span><b>${eur(V.ta)}</b></div>
+    <div class="card stat"><span class="label">Kosten ${y-1}</span><b>${eur(V.tp)}</b></div>
+    <div class="card stat"><span class="label">Veränderung</span><b class="${V.td>0?'diff-up':'diff-down'}">${V.td>0?'+':''}${eur(V.td)}</b><span class="small muted">${pctTxt(V.tpct)}</span></div>
+  </div>
+  ${offen?`<div class="notice">${offen} Kostenart${offen>1?'en':''} mit mehr als 10 % Veränderung ohne Begründung.</div>`:''}
+  <div class="card"><h3>Vorjahresvergleich</h3>
+    <div class="table-wrap"><table><thead><tr><th>Kostenart</th><th class="num">${y-1}</th><th class="num">${y}</th><th class="num">Differenz</th><th>Begründung</th></tr></thead><tbody>
+    ${V.rows.map(r=>`<tr><td>${esc(r.k.name)}${r.k.umlagefaehig===false?' <span class="pill">nicht uml.</span>':''}</td><td class="num">${eur(r.p)}</td><td class="num">${eur(r.a)}</td>
+      <td class="num"><span class="${r.d>0?'diff-up':r.d<0?'diff-down':''}">${r.d>0?'+':''}${eur(r.d)}</span><br>${r.pct!==null&&Math.abs(r.pct)>=10?`<span class="pill warn">${pctTxt(r.pct)}</span>`:`<span class="small muted">${pctTxt(r.pct)}</span>`}</td>
+      <td class="bg"><input id="bg-${r.k.id}" data-bg="${r.k.id}" value="${esc(r.bg)}" placeholder="z. B. Preiserhöhung, Pellets auf Vorrat" ${ro}></td></tr>`).join('')||`<tr><td colspan="5" class="empty">Für ${y-1} und ${y} gibt es noch keine Belege.</td></tr>`}
+    </tbody><tfoot><tr><td>Summe</td><td class="num">${eur(V.tp)}</td><td class="num">${eur(V.ta)}</td><td class="num">${V.td>0?'+':''}${eur(V.td)}</td><td></td></tr></tfoot></table></div></div>
+
+  <div class="card"><h3>Einnahmen und Kosten je Einheit</h3>
+    <div class="table-wrap"><table><thead><tr><th></th>${col(r=>`<th class="num">${esc(r.e.name)}<br><span style="text-transform:none;letter-spacing:0">${TYP[r.e.typ]||''}</span></th>`)}</tr></thead><tbody>
+      <tr><td>Kaltmiete erhalten</td>${col(r=>`<td class="num">${r.eigen?'–':eur(r.miete)}</td>`)}</tr>
+      <tr><td>NK-Vorauszahlungen erhalten</td>${col(r=>`<td class="num">${r.eigen?'–':eur(r.vz)}</td>`)}</tr>
+      <tr><td><b>Einnahmen</b></td>${col(r=>`<td class="num"><b>${r.eigen?'–':eur(r.einnahmen)}</b></td>`)}</tr>
+      <tr><td>Umgelegte Betriebskosten (Anteil)</td>${col(r=>`<td class="num">${eur(r.uml)}</td>`)}</tr>
+      <tr><td>Nicht umgelegte Kosten (nach Fläche)</td>${col(r=>`<td class="num">${eur(r.nicht)}</td>`)}</tr>
+      <tr><td class="small muted">davon Schuldzinsen</td>${col(r=>`<td class="num small muted">${eur(r.zinsen)}</td>`)}</tr>
+      <tr><td><b>Kosten gesamt</b></td>${col(r=>`<td class="num"><b>${eur(r.kosten)}</b></td>`)}</tr>
+      <tr><td>Ergebnis Abrechnung ${y} (Zahlung ${y+1})</td>${col(r=>`<td class="num">${r.eigen?'–':(r.saldo>0?'Nachz. ':'Guth. ')+eur(Math.abs(r.saldo))}</td>`)}</tr>
+    </tbody></table></div></div>
+
+  <div class="card"><h3>Steuerdaten ${y}</h3>
+    <div class="table-wrap"><table><thead><tr><th></th>${col(r=>`<th class="num">${esc(r.e.name)}</th>`)}</tr></thead><tbody>
+      <tr><td>AfA (Gebäude)<div class="small muted">automatisch aus Einstellung, hier überschreibbar</div></td>${col(r=>`<td class="num"><input inputmode="decimal" id="st-${r.e.id}-afa" data-st="${r.e.id}|afa" placeholder="${nf(r.afaAuto)}" value="${val(ejahr(y,r.e).afa)}" ${ro}></td>`)}</tr>
+      <tr><td>Sonder-AfA / Sonderabschreibung</td>${col(r=>`<td class="num"><input inputmode="decimal" id="st-${r.e.id}-sonder" data-st="${r.e.id}|sonderAfa" value="${val(ejahr(y,r.e).sonderAfa)}" ${ro}></td>`)}</tr>
+      <tr><td>Sonstige Werbungskosten<div class="small muted">Fahrten, Kontoführung, Steuerberater …</div></td>${col(r=>`<td class="num"><input inputmode="decimal" id="st-${r.e.id}-sonst" data-st="${r.e.id}|sonstigeWK" value="${val(ejahr(y,r.e).sonstigeWK)}" ${ro}></td>`)}</tr>
+      <tr><td>Schuldzinsen (aus Belegen)</td>${col(r=>`<td class="num">${eur(r.zinsen)}</td>`)}</tr>
+      <tr><td><b>Ergebnis nach AfA</b><div class="small muted">Anlage V bzw. Betriebsausgaben</div></td>${col(r=>`<td class="num"><b class="${r.nachAfa<0?'minus':'plus'}">${r.e.typ==='eigen'?'privat':r.betrieb?'BA '+eur(r.kosten+r.afa+r.sonder+r.sonst):eur(r.nachAfa)}</b></td>`)}</tr>
+    </tbody></table></div>
+    <p class="small muted" style="margin:8px 0 0">Eigener Betrieb: Kosten als Betriebsausgaben (BA) für die EÜR. Eigennutzung: privat, keine Werbungskosten. Die Prüfung macht der Steuerberater.</p></div>
+
+  <div class="card"><h3>§35a Handwerker und haushaltsnahe Dienstleistungen</h3>
+    <div class="table-wrap"><table><thead><tr><th></th>${col(r=>`<th class="num">${esc(r.e.name)}</th>`)}</tr></thead><tbody>
+      <tr><td>Haushaltsnahe Dienstleistungen (Lohnanteil)</td>${col(r=>`<td class="num">${eur(r.eigen?r.p35.dienst:r.p35.dienstUml)}</td>`)}</tr>
+      <tr><td>Handwerkerleistungen (Lohnanteil)</td>${col(r=>`<td class="num">${eur(r.eigen?r.p35.handwerker:r.p35.handwerkerUml)}</td>`)}</tr>
+      <tr><td><b>Steuerermäßigung ca. 20 %</b></td>${col(r=>`<td class="num"><b>${r.betrieb?'–':eur(0.2*(r.eigen?r.p35.dienst+r.p35.handwerker:r.p35.dienstUml+r.p35.handwerkerUml))}</b></td>`)}</tr>
+    </tbody></table></div>
+    <p class="small muted" style="margin:8px 0 0">Mieter: ihr Anteil an umgelegten Kosten (steht auch in ihrer Abrechnung). Eigennutzung: Anteil an allen Kosten inkl. Reparaturen. Nur Lohn-, Maschinen- und Fahrtkosten zählen, nur unbar bezahlt. Kostenart und Lohnbetrag im Beleg festlegen.</p></div>
+
+  <div class="card"><h3>Notiz an den Steuerberater</h3><textarea id="abs-notiz" data-abs-notiz ${ro} placeholder="z. B. Mieterwechsel, größere Reparatur, neue Zähler">${esc(jahr(y).notiz||'')}</textarea></div>
+
+  <div class="card"><h3>Was geht an den Steuerberater?</h3>
+    <div class="stack" style="gap:10px">
+      <div class="chips">${EXP_SEK.map(([k,l])=>`<label class="check"><input type="checkbox" data-exp-sek="${k}" ${W.sek[k]!==false?'checked':''}> ${l}</label>`).join('')}</div>
+      <span class="label">Einheiten</span>
+      <div class="chips">${rows.map(r=>`<label class="check"><input type="checkbox" data-exp-einh="${r.e.id}" ${W.einh[r.e.id]!==false?'checked':''}> ${esc(r.e.name)}</label>`).join('')}</div>
+      ${downloads?`<div class="actions"><button class="btn primary" data-act="pdf-abschluss">PDF für Steuerberater</button><button class="btn" data-act="csv-jahr">Belege ${y} (CSV)</button></div>`:'<span class="small muted">Download in dieser Ansicht nicht verfügbar.</span>'}
+    </div></div>
+  </div>`;
+}
+function bindAbschluss(){
+  $$('[data-bg]').forEach(i=>i.onchange=()=>{const k=i.dataset.bg,v=i.value.trim();
+    mutate('jahre/'+S.year,d=>{d.begruendung=d.begruendung||{};d.begruendung[k]=v;return d}).then(()=>toast('Begründung gespeichert')).catch(dbFail)});
+  $$('[data-st]').forEach(i=>i.onchange=()=>{const[eid,f]=i.dataset.st.split('|');const v=i.value.trim()===''?'':num(i.value);
+    mutate('jahre/'+S.year,d=>{d.einheiten=d.einheiten||{};d.einheiten[eid]=d.einheiten[eid]||{};d.einheiten[eid][f]=v;return d}).then(()=>toast('Gespeichert')).catch(dbFail)});
+  const n=$('[data-abs-notiz]');if(n)n.onchange=()=>mutate('jahre/'+S.year,d=>{d.notiz=n.value.trim();return d}).then(()=>toast('Notiz gespeichert')).catch(dbFail);
+  $$('[data-exp-sek],[data-exp-einh]').forEach(c=>c.onchange=()=>{const W=expWahl();
+    if(c.dataset.expSek)W.sek[c.dataset.expSek]=c.checked;else W.einh[c.dataset.expEinh]=c.checked;ls.set('nk-exp',JSON.stringify(W))});
+}
+
+/* Einstellungen */
+function viewEinst(){
+  const st=S.settings,E=einheiten(),K=kostenarten();
+  return `<div class="view-head"><h2>Einstellungen</h2></div><div class="stack">
+  <div class="card"><h3>Objekt & Vermieter</h3><div class="fields">
+    <div class="field"><label for="s-objekt">Objekt</label><input id="s-objekt" data-s="objekt" value="${esc(st.objekt||'')}" placeholder="z. B. Hüttenheim, Hauptstr. 1"></div>
+    <div class="field"><label for="s-vermieter">Vermieter</label><input id="s-vermieter" data-s="vermieter" value="${esc(st.vermieter||'')}"></div>
+    <div class="field"><label for="s-adresse">Adresse Vermieter</label><input id="s-adresse" data-s="adresse" value="${esc(st.adresse||'')}"></div>
+    <div class="field"><label for="s-iban">IBAN für Nachzahlung</label><input id="s-iban" data-s="iban" value="${esc(st.iban||'')}"></div>
+    <div class="field"><label for="s-frist">Zahlungsfrist (Text)</label><input id="s-frist" data-s="frist" value="${esc(st.frist||'')}" placeholder="z. B. 31.03.2027"></div>
+  </div></div>
+  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h3 style="margin:0">Einheiten</h3><button class="btn sm" data-act="new-einheit">+ Einheit</button></div>
+    <div class="list">${E.map(e=>`<div class="row click" data-einheit="${e.id}"><div class="grow"><div class="title">${esc(e.name)}</div><div class="small muted">${TYP[e.typ]||''} · ${nf(num(e.flaeche))} m² · ${nf(num(e.personen),1)} Pers. · VZ ${eur(e.vorauszahlung)}/Monat</div></div>${num(e.flaeche)?'':'<span class="pill warn">Fläche fehlt</span>'}</div>`).join('')||'<div class="empty">Noch keine Einheit.</div>'}</div></div>
+  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h3 style="margin:0">Kostenarten</h3><button class="btn sm" data-act="new-kostenart">+ Kostenart</button></div>
+    <div class="list">${K.map(k=>`<div class="row click" data-kostenart="${k.id}"><div class="grow"><div class="title">${esc(k.name)}</div><div class="small muted">${k.umlagefaehig===false?'nicht umlagefähig':SCHLUESSEL[k.schluessel]||''}${k.schluessel==='mix'?' · '+nf(k.anteilVerbrauch||70,0)+' % Verbrauch':''}${k.schluessel==='mixpers'?' · '+nf(k.anteilVerbrauch||60,0)+' % Personen / '+nf(100-num(k.anteilVerbrauch||60),0)+' % Fläche':''}${k.umlagefaehig!==false&&umlAnteil(k)<1?' · nur '+nf(umlAnteil(k)*100,2)+' % umlagefähig':''}${(k.ausgeschlossen||[]).length?' · ohne '+k.ausgeschlossen.map(i=>esc(eById(i)?.name||'')).join(', '):''}</div></div></div>`).join('')||'<div class="empty">Noch keine Kostenart.</div>'}</div></div>
+  <div class="card"><h3>Datensicherung</h3><div class="actions">
+    <button class="btn" data-act="csv">Belege als CSV (Excel)</button><button class="btn" data-act="json">Komplette Sicherung (JSON)</button><button class="btn" data-act="sicherung">Sicherung einspielen</button>
+  </div><p class="small muted" style="margin:8px 0 0">Die Sicherung am besten in den OneDrive-Ordner speichern. Belegfotos sind nicht in der JSON-Datei, sie liegen im Gerät und auf dem Server.</p></div>
+  ${serverCard()}</div>`;
+}
+
+/* ---------- Formulare ---------- */
+function renderEdit(){
+  const {type,id}=S.edit;
+  const back=`<button class="btn sm" data-act="cancel">‹ Zurück</button>`;
+  if(type==='beleg'){
+    const b=S.belege.find(x=>x.id===id)||{datum:S.year===new Date().getFullYear()?today():S.year+'-12-31',kostenart:S.filterK||''};
+    const ftype=b.fotoTyp||'';
+    return `<div class="view-head">${back}<h2>${id?'Beleg bearbeiten':'Neuer Beleg'}</h2><span></span></div>
+    <form class="card stack" id="f-edit">
+      <div class="fields">
+        <div class="field"><label for="b-betrag">Betrag (€)</label><input id="b-betrag" class="big-in" inputmode="decimal" required value="${b.betrag!==undefined?String(b.betrag).replace('.',','):''}" placeholder="0,00"></div>
+        <div class="field"><label for="b-datum">Rechnungsdatum</label><input id="b-datum" type="date" required value="${esc(b.datum||'')}"></div>
+      </div>
+      <div class="field"><label for="b-k">Kostenart</label><select id="b-k" required><option value="">Bitte wählen</option>${kostenarten().map(k=>`<option value="${k.id}" ${b.kostenart===k.id?'selected':''}>${esc(k.name)}${k.umlagefaehig===false?' (nicht umlagefähig)':''}</option>`).join('')}</select></div>
+      <div class="field"><label for="b-text">Beschreibung / Firma</label><input id="b-text" value="${esc(b.text||'')}" placeholder="z. B. Netze BW Abschlag, Stadtwerke Wasser"></div>
+      <div class="fields">
+        <div class="field"><label for="b-jahr">Zählt für Abrechnungsjahr</label><input id="b-jahr" inputmode="numeric" value="${esc(b.abrJahr||'')}" placeholder="wie Rechnungsdatum"></div>
+        <div class="field"><label for="b-einheit">Nur für Einheit</label><select id="b-einheit"><option value="">Alle – nach Schlüssel verteilen</option>${einheiten().map(e=>`<option value="${e.id}" ${b.einheit===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label for="b-lohn">Davon Arbeitskosten € (§35a, lt. Rechnung)</label><input id="b-lohn" inputmode="decimal" value="${b.lohn!==undefined&&b.lohn!==''?String(b.lohn).replace('.',','):''}" placeholder="nur bei Handwerker/Dienstleistung"></div>
+      <div class="field"><label for="b-notiz">Notiz</label><textarea id="b-notiz">${esc(b.notiz||'')}</textarea></div>
+      ${assets?`<div class="field"><label>Beleg-Foto / PDF</label><div class="actions" style="align-items:center">
+        ${b.foto?(ftype.startsWith('image')?`<img class="thumb" data-blob="${esc(b.foto)}" alt="Beleg" style="cursor:pointer" onclick="this.src&&window.open(this.src,'_blank')">`:`<button type="button" class="btn sm" data-blob="${esc(b.foto)}">PDF öffnen</button>`):''}
+        <button type="button" class="btn sm" data-act="foto">${b.foto?'Ersetzen':'Foto/PDF hinzufügen'}</button><span class="small muted" id="foto-st"></span></div></div>`:''}
+      <div class="actions" style="justify-content:space-between">
+        ${id?`<button type="button" class="btn danger" data-act="del">Löschen</button>`:'<span></span>'}
+        <button class="btn primary" ${S.canWrite?'':'disabled'}>Speichern</button></div>
+    </form>`;
+  }
+  if(type==='einheit'){
+    const e=eById(id)||{typ:'vermietet',personen:1};
+    return `<div class="view-head">${back}<h2>${id?'Einheit bearbeiten':'Neue Einheit'}</h2><span></span></div>
+    <form class="card stack" id="f-edit"><div class="fields">
+      <div class="field"><label for="e-name">Name</label><input id="e-name" required value="${esc(e.name||'')}" placeholder="z. B. Haus 1"></div>
+      <div class="field"><label for="e-typ">Nutzung</label><select id="e-typ">${Object.entries(TYP).map(([k,v])=>`<option value="${k}" ${e.typ===k?'selected':''}>${v}</option>`).join('')}</select></div>
+      <div class="field"><label for="e-flaeche">Fläche (m²)</label><input id="e-flaeche" inputmode="decimal" value="${e.flaeche!==undefined?String(e.flaeche).replace('.',','):''}"></div>
+      <div class="field"><label for="e-personen">Personen</label><input id="e-personen" inputmode="decimal" value="${e.personen!==undefined?String(e.personen).replace('.',','):''}"></div>
+      <div class="field"><label for="e-mieter">Mieter / Nutzer</label><input id="e-mieter" value="${esc(e.mieter||'')}"></div>
+      <div class="field"><label for="e-adresse">Adresse der Einheit</label><input id="e-adresse" value="${esc(e.adresse||'')}"></div>
+      <div class="field"><label for="e-vz">Vorauszahlung €/Monat</label><input id="e-vz" inputmode="decimal" value="${e.vorauszahlung!==undefined?String(e.vorauszahlung).replace('.',','):''}"></div>
+      <div class="field"><label for="e-miete">Kaltmiete €/Monat</label><input id="e-miete" inputmode="decimal" value="${e.miete!==undefined?String(e.miete).replace('.',','):''}"></div>
+      <div class="field"><label for="e-rf">Reihenfolge</label><input id="e-rf" inputmode="numeric" value="${esc(e.reihenfolge??'')}"></div>
+    </div>
+    <span class="label">Abschreibung (AfA) – für den Steuerberater</span>
+    <div class="fields">
+      <div class="field"><label for="e-afab">Gebäudeanteil € (ohne Grundstück)</label><input id="e-afab" inputmode="decimal" value="${e.afaBasis!==undefined?String(e.afaBasis).replace('.',','):''}"></div>
+      <div class="field"><label for="e-afas">AfA-Satz %</label><input id="e-afas" inputmode="decimal" value="${e.afaSatz!==undefined?String(e.afaSatz).replace('.',','):''}" placeholder="2 (ab 1925), 2,5 (vor 1925), 3 (ab 2023)"></div>
+      <div class="field"><label for="e-afaab">Angeschafft / fertig am</label><input id="e-afaab" type="date" value="${esc(e.afaAb||'')}"></div>
+    </div>
+    <div class="actions" style="justify-content:space-between">${id?`<button type="button" class="btn danger" data-act="del">Löschen</button>`:'<span></span>'}<button class="btn primary" ${S.canWrite?'':'disabled'}>Speichern</button></div></form>`;
+  }
+  if(type==='kostenart'){
+    const k=kById(id)||{schluessel:'flaeche',umlagefaehig:true,anteilVerbrauch:70};
+    return `<div class="view-head">${back}<h2>${id?'Kostenart bearbeiten':'Neue Kostenart'}</h2><span></span></div>
+    <form class="card stack" id="f-edit"><div class="fields">
+      <div class="field"><label for="k-name">Name</label><input id="k-name" required value="${esc(k.name||'')}"></div>
+      <div class="field"><label for="k-s">Verteilerschlüssel</label><select id="k-s">${Object.entries(SCHLUESSEL).map(([s,v])=>`<option value="${s}" ${k.schluessel===s?'selected':''}>${v}</option>`).join('')}</select></div>
+      <div class="field"><label for="k-anteil">Anteil Verbrauch bzw. Personen % (Rest nach Fläche)</label><input id="k-anteil" inputmode="numeric" value="${esc(k.anteilVerbrauch??70)}"></div>
+      <div class="field"><label for="k-einheit">Zähler-Einheit</label><input id="k-einheit" value="${esc(k.einheit||'')}" placeholder="m³, kWh …"></div>
+      <div class="field"><label for="k-rf">Reihenfolge</label><input id="k-rf" inputmode="numeric" value="${esc(k.reihenfolge??'')}"></div>
+      <div class="field"><label for="k-up">Umlagefähiger Anteil % (Rest wird vorher abgezogen)</label><input id="k-up" inputmode="decimal" value="${k.anteilUml===undefined||k.anteilUml===''?'100':String(k.anteilUml).replace('.',',')}"></div>
+      <div class="field"><label for="k-kt">Begründung Abzug (erscheint in der Abrechnung)</label><input id="k-kt" value="${esc(k.kuerzungText||'')}" placeholder="z. B. 12 von 18 kW ins Heizwasser"></div>
+      <div class="field"><label for="k-35">§35a Steuerermäßigung</label><select id="k-35"><option value="">Nein</option>${Object.entries(ART35).map(([a,l])=>`<option value="${a}" ${k.p35a===a?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label for="k-lohn">Lohnanteil % (wenn im Beleg kein Betrag)</label><input id="k-lohn" inputmode="decimal" value="${esc(k.lohnAnteil??'')}" placeholder="z. B. 100 Hausmeister"></div>
+      <div class="field"><label for="k-st">Steuerlich</label><select id="k-st"><option value="">Normale Kosten</option><option value="zinsen" ${k.steuerTyp==='zinsen'?'selected':''}>Schuldzinsen</option></select></div>
+    </div>
+    <label class="check"><input type="checkbox" id="k-uml" ${k.umlagefaehig!==false?'checked':''}> Umlagefähig (kommt in die Abrechnung)</label>
+    <div class="field"><span class="label">Nimmt nicht teil</span><div class="chips">${einheiten().map(e=>`<label class="check"><input type="checkbox" data-aus="${e.id}" ${(k.ausgeschlossen||[]).includes(e.id)?'checked':''}> ${esc(e.name)}</label>`).join('')}</div></div>
+    <div class="actions" style="justify-content:space-between">${id?`<button type="button" class="btn danger" data-act="del">Löschen</button>`:'<span></span>'}<button class="btn primary" ${S.canWrite?'':'disabled'}>Speichern</button></div></form>`;
+  }
+  return '';
+}
+let pendingFoto=null;
+function bindEdit(){
+  const {type,id}=S.edit;const f=$('#f-edit');
+  $$('[data-act="cancel"]').forEach(b=>b.onclick=()=>{pendingFoto=null;S.edit=null;render()});
+  const delBtn=$('[data-act="del"]');
+  if(delBtn)delBtn.onclick=async()=>{
+    if(!delBtn.classList.contains('armed')){delBtn.classList.add('armed');delBtn.textContent='Wirklich löschen?';return}
+    const col={beleg:'belege',einheit:'einheiten',kostenart:'kostenarten'}[type];
+    if(type==='kostenart'&&S.belege.some(b=>b.kostenart===id)){toast('Diese Kostenart hat noch Belege.');return}
+    if(await del(col+'/'+id)){toast('Gelöscht');S.edit=null;render()}};
+  const fb=$('[data-act="foto"]');
+  if(fb)fb.onclick=()=>$('#beleg-file').click();
+  f.onsubmit=async ev=>{ev.preventDefault();
+    if(type==='beleg'){
+      const old=S.belege.find(x=>x.id===id)||{};
+      const d={...old,betrag:r2(num($('#b-betrag').value)),datum:$('#b-datum').value,kostenart:$('#b-k').value,text:$('#b-text').value.trim(),
+        abrJahr:$('#b-jahr').value.trim()?Number($('#b-jahr').value):'',einheit:$('#b-einheit').value,notiz:$('#b-notiz').value.trim(),lohn:$('#b-lohn').value.trim()===''?'':r2(num($('#b-lohn').value))};
+      delete d.id;
+      if(!d.betrag){toast('Bitte einen Betrag eingeben.');return}
+      if(pendingFoto){d.foto=pendingFoto.id;d.fotoTyp=pendingFoto.type}
+      const nid=id||uid();if(!id)d.erstellt=new Date().toISOString();
+      if(await save('belege/'+nid,d)){pendingFoto=null;toast(id?'Beleg gespeichert':'Beleg erfasst – '+eur(d.betrag));S.edit=null;render()}
+    }
+    if(type==='einheit'){
+      const old=eById(id)||{};
+      const d={...old,name:$('#e-name').value.trim(),typ:$('#e-typ').value,flaeche:num($('#e-flaeche').value),personen:num($('#e-personen').value),
+        mieter:$('#e-mieter').value.trim(),adresse:$('#e-adresse').value.trim(),vorauszahlung:num($('#e-vz').value),miete:num($('#e-miete').value),reihenfolge:num($('#e-rf').value),afaBasis:num($('#e-afab').value),afaSatz:num($('#e-afas').value),afaAb:$('#e-afaab').value};delete d.id;
+      if(await save('einheiten/'+(id||uid()),d)){toast('Einheit gespeichert');S.edit=null;render()}
+    }
+    if(type==='kostenart'){
+      const old=kById(id)||{};
+      const d={...old,name:$('#k-name').value.trim(),schluessel:$('#k-s').value,anteilVerbrauch:num($('#k-anteil').value)||70,einheit:$('#k-einheit').value.trim(),
+        reihenfolge:num($('#k-rf').value),anteilUml:$('#k-up').value.trim()===''?100:Math.min(100,Math.max(0,num($('#k-up').value))),kuerzungText:$('#k-kt').value.trim(),p35a:$('#k-35').value,lohnAnteil:$('#k-lohn').value.trim()===''?'':num($('#k-lohn').value),steuerTyp:$('#k-st').value,umlagefaehig:$('#k-uml').checked,ausgeschlossen:$$('[data-aus]').filter(c=>c.checked).map(c=>c.dataset.aus)};delete d.id;
+      if(await save('kostenarten/'+(id||uid()),d)){toast('Kostenart gespeichert');S.edit=null;render()}
+    }
+  };
+}
+$('#import-file').addEventListener('change',async ev=>{
+  const file=ev.target.files[0];ev.target.value='';if(!file)return;
+  try{const n=await importJson(file);toast(n+' Einträge eingespielt');render()}catch(e){console.error(e);toast('Datei konnte nicht gelesen werden – ist es eine Nebenkosten-Sicherung?',5000)}
+});
+$('#beleg-file').addEventListener('change',async ev=>{
+  const file=ev.target.files[0];ev.target.value='';if(!file||!assets)return;
+  const st=$('#foto-st');if(st)st.textContent='Wird hochgeladen …';
+  try{let blob=file;if(file.type.startsWith('image/'))blob=await compressImage(file);
+    const r=await assets.upload(blob);pendingFoto={id:r.id,type:r.contentType};
+    if(st)st.textContent='Hochgeladen – zum Übernehmen „Speichern“ tippen.';
+  }catch(e){console.error(e);if(st)st.textContent='';toast(e&&e.code==='too_large'?'Datei zu groß (max. 20 MB).':'Hochladen fehlgeschlagen.')}
+});
+async function compressImage(file,max=1800,q=.82){
+  const url=URL.createObjectURL(file);
+  try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});
+    const sc=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+    const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*sc);c.height=Math.round(img.naturalHeight*sc);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    return await new Promise(r=>c.toBlob(r,'image/jpeg',q));
+  }finally{URL.revokeObjectURL(url)}
+}
+
+/* ---------- Ereignisse in Ansichten ---------- */
+function bindView(){
+  const v=$('#view');
+  v.onclick=async e=>{
+    const t=e.target.closest('[data-act],[data-beleg],[data-einheit],[data-kostenart],[data-abr],[data-abr-sel],[data-tab-go]');if(!t)return;
+    if(t.dataset.tabGo)return go(t.dataset.tabGo);
+    if(t.dataset.beleg){S.edit={type:'beleg',id:t.dataset.beleg};pendingFoto=null;return render()}
+    if(t.dataset.einheit){S.edit={type:'einheit',id:t.dataset.einheit};return render()}
+    if(t.dataset.kostenart){S.edit={type:'kostenart',id:t.dataset.kostenart};return render()}
+    if(t.dataset.abr){S.abrE=t.dataset.abr;return go('abrechnung')}
+    if(t.dataset.abrSel){S.abrE=t.dataset.abrSel;return render()}
+    const a=t.dataset.act;
+    if(a==='new-beleg'){if(!kostenarten().length){toast('Bitte zuerst Kostenarten anlegen.');return go('einst')}S.edit={type:'beleg',id:null};pendingFoto=null;render();window.scrollTo(0,0)}
+    if(a==='new-einheit'){S.edit={type:'einheit',id:null};render()}
+    if(a==='new-kostenart'){S.edit={type:'kostenart',id:null};render()}
+    if(a==='pdf')pdfExport();
+    if(a==='pdf-abschluss')pdfAbschluss();
+    if(a==='csv-jahr')csvExport(S.year);
+    if(a==='csv')csvExport();
+    if(a==='json')jsonExport();
+    if(a==='sicherung')$('#import-file').click();
+    if(a==='neu'){await grundeinrichtung();toast('Eingerichtet – bitte Flächen prüfen');go('einst')}
+    if(a==='srv-jetzt'){syncKick(true);toast('Abgleich gestartet')}
+    if(a==='srv-trennen'){if(!t.classList.contains('armed')){t.classList.add('armed');t.textContent='Wirklich trennen?';return}srvTrennen()}
+  };
+  const fl=$('#f-filter');if(fl)fl.onchange=()=>{S.filterK=fl.value;render()};
+  bindAbschluss();bindServer();
+  $$('[data-s]').forEach(i=>i.onchange=()=>{const d={...S.settings,[i.dataset.s]:i.value.trim()};save('settings/main',d).then(ok=>ok&&toast('Gespeichert'))});
+  $$('[data-z]').forEach(i=>i.onchange=()=>{const[k,eid,f]=i.dataset.z.split('|');const v=i.value.trim()===''?'':num(i.value);const y=S.year;
+    mutate('jahre/'+y,d=>{d.zaehler=d.zaehler||{};d.zaehler[k]=d.zaehler[k]||{};d.zaehler[k][eid]=d.zaehler[k][eid]||{};d.zaehler[k][eid][f]=v;return d})
+      .then(()=>{toast('Zählerstand gespeichert');if(f==='e'&&v!==''){const n=((jahr(y+1).zaehler||{})[k]||{})[eid];if(!n||n.a===undefined||n.a==='')
+        mutate('jahre/'+(y+1),d=>{d.zaehler=d.zaehler||{};d.zaehler[k]=d.zaehler[k]||{};d.zaehler[k][eid]=d.zaehler[k][eid]||{};if(d.zaehler[k][eid].a===undefined||d.zaehler[k][eid].a==='')d.zaehler[k][eid].a=v;return d}).catch(dbFail)}}).catch(dbFail)});
+  $$('[data-j]').forEach(i=>i.onchange=()=>{const[eid,f]=i.dataset.j.split('|');const v=i.value.trim()===''?'':num(i.value);
+    mutate('jahre/'+S.year,d=>{d.einheiten=d.einheiten||{};d.einheiten[eid]=d.einheiten[eid]||{};d.einheiten[eid][f]=v;return d}).then(()=>toast('Gespeichert')).catch(dbFail)});
+}
+
+/* ---------- Export ---------- */
+async function saveFile(filename,data){if(!downloads){toast('Download hier nicht verfügbar.');return}
+  try{await downloads.save({filename,data});toast('Datei bereitgestellt')}catch(e){if(e&&e.code==='declined')return;console.error(e);toast('Speichern nicht möglich.')}}
+function csvExport(jahrNur){
+  const q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
+  const rows=[['Datum','Abrechnungsjahr','Kostenart','Umlagefähig','Beschreibung','Nur Einheit','Betrag','Notiz'].map(q).join(';')];
+  (jahrNur?belegeJahr(jahrNur):[...S.belege]).sort((a,b)=>String(a.datum).localeCompare(String(b.datum))).forEach(b=>{const k=kById(b.kostenart);
+    rows.push([fmtDate(b.datum),belegJahr(b),k?.name||'',k?.umlagefaehig===false?'nein':'ja',b.text||'',eById(b.einheit)?.name||'',String(r2(num(b.betrag))).replace('.',','),b.notiz||''].map(q).join(';'))});
+  saveFile('Belege_Nebenkosten'+(jahrNur?'_'+jahrNur:'')+'.csv','﻿'+rows.join('\r\n'));
+}
+function pdfAbschluss(){
+  if(!window.jspdf){toast('PDF-Bibliothek nicht geladen.');return}
+  const y=S.year,st=S.settings,V=vergleich(y),W=expWahl();
+  const rows=aufteilung(y).rows.filter(r=>W.einh[r.e.id]!==false);
+  const sek=k=>W.sek[k]!==false;
+  if(!EXP_SEK.some(([k])=>sek(k))){toast('Bitte mindestens einen Teil auswählen.');return}
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});
+  const tx=s=>String(s??'').replace(/€/g,'EUR').replace(/m²/g,'m2').replace(/m³/g,'m3').replace(/[–−]/g,'-').replace(/§/g,'Par. ');
+  const E=n=>(Number(n)||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const L=15,R=195;let yy=18,nr=0;
+  const need=h=>{if(yy+h>282){doc.addPage();yy=18}};
+  const h2=t=>{need(14);yy+=4;doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text(tx((++nr)+'. '+t),L,yy);yy+=6;doc.setFont('helvetica','normal');doc.setFontSize(9)};
+  const note=t=>{need(10);doc.setFontSize(8);doc.setTextColor(90);const l=doc.splitTextToSize(tx(t),180);doc.text(l,L,yy+2);doc.setTextColor(0);doc.setFontSize(9);yy+=l.length*3.5+4};
+  function table(cols,data,boldRows){
+    const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);cols.forEach(c=>doc.text(tx(c.t),c.a==='r'?c.x+c.w:c.x,yy,{align:c.a==='r'?'right':'left'}));yy+=1.5;doc.line(L,yy,R,yy);yy+=4;doc.setFont('helvetica','normal');doc.setFontSize(9)};
+    need(12);head();
+    data.forEach((row,ri)=>{const cells=row.map((v,i)=>cols[i].wrap?doc.splitTextToSize(tx(v),cols[i].w):[tx(v)]);
+      const h=Math.max(...cells.map(c=>c.length))*4+1.5;if(yy+h>282){doc.addPage();yy=18;head()}
+      const b=boldRows&&boldRows.includes(ri<0?ri:(ri===data.length-1?-1:ri));
+      if(b){doc.setFont('helvetica','bold');if(ri===data.length-1)doc.line(L,yy-3.5,R,yy-3.5)}
+      cells.forEach((c,i)=>doc.text(c,cols[i].a==='r'?cols[i].x+cols[i].w:cols[i].x,yy,{align:cols[i].a==='r'?'right':'left'}));
+      doc.setFont('helvetica','normal');yy+=h});
+  }
+  const cw=Math.min(36,(R-75)/Math.max(1,rows.length));
+  const ecols=[{t:'',x:L,w:58,wrap:1},...rows.map((r,i)=>({t:r.e.name,x:75+i*cw,w:cw-2,a:'r'}))];
+  const line=(lab,f)=>[lab,...rows.map(f)];
+
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text('Jahresabschluss Haus und Nebenkosten '+y,L,yy);yy+=6;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(80);
+  doc.text(tx([st.objekt,st.vermieter].filter(Boolean).join(' | ')+' | erstellt '+fmtDate(today())),L,yy);doc.setTextColor(0);yy+=4;
+
+  if(sek('verg')){h2('Kosten nach Kostenart mit Vorjahresvergleich');
+    table([{t:'Kostenart',x:L,w:52,wrap:1},{t:String(y-1),x:67,w:22,a:'r'},{t:String(y),x:91,w:22,a:'r'},{t:'Diff. EUR',x:115,w:20,a:'r'},{t:'%',x:137,w:12,a:'r'},{t:'Begründung',x:152,w:43,wrap:1}],
+      [...V.rows.map(r=>[r.k.name+(r.k.umlagefaehig===false?' (nicht uml.)':''),E(r.p),E(r.a),(r.d>0?'+':'')+E(r.d),r.pct===null?'neu':nf(r.pct,1),r.bg]),['Summe',E(V.tp),E(V.ta),(V.td>0?'+':'')+E(V.td),V.tpct===null?'':nf(V.tpct,1),'']],[-1])}
+
+  if(rows.length&&sek('einheiten')){h2('Einnahmen und Kosten je Einheit');
+    table(ecols,[
+      line('Nutzung',r=>TYP[r.e.typ]||''),
+      line('Fläche m2 / Personen',r=>nf(num(r.e.flaeche))+' / '+nf(personenVon(y,r.e),1)),
+      line('Kaltmiete erhalten',r=>r.eigen?'-':E(r.miete)),
+      line('NK-Vorauszahlungen erhalten',r=>r.eigen?'-':E(r.vz)),
+      line('Einnahmen',r=>r.eigen?'-':E(r.einnahmen)),
+      line('Umgelegte Betriebskosten',r=>E(r.uml)),
+      line('Nicht umgelegte Kosten (nach Fläche)',r=>E(r.nicht)),
+      line('  davon Schuldzinsen',r=>E(r.zinsen)),
+      line('Kosten gesamt',r=>E(r.kosten)),
+      line('Ergebnis Abrechnung (Zahlung '+(y+1)+')',r=>r.eigen?'-':(r.saldo>0?'Nachz. ':'Guth. ')+E(Math.abs(r.saldo)))],[4,8]);
+    note('Nachzahlungen und Guthaben aus der Nebenkostenabrechnung fließen steuerlich im Jahr der Zahlung.')}
+
+  if(rows.length&&sek('steuer')){h2('Steuerdaten (Anlage V / EÜR)');
+    table(ecols,[
+      line('Einnahmen',r=>r.eigen?'-':E(r.einnahmen)),
+      line('Betriebskosten gesamt (inkl. Zinsen)',r=>E(r.kosten)),
+      line('  davon Schuldzinsen',r=>E(r.zinsen)),
+      line('AfA Gebäude',r=>E(r.afa)+(r.e.afaSatz&&!r.afaManuell?' ('+nf(num(r.e.afaSatz),2)+'%)':'')),
+      line('Sonder-AfA',r=>E(r.sonder)),
+      line('Sonstige Werbungskosten',r=>E(r.sonst)),
+      line('Ergebnis',r=>r.e.typ==='eigen'?'privat':r.betrieb?'BA '+E(r.kosten+r.afa+r.sonder+r.sonst):E(r.nachAfa))],[6]);
+    const afaInfo=rows.filter(r=>num(r.e.afaBasis)).map(r=>r.e.name+': Bemessungsgrundlage '+E(r.e.afaBasis)+' EUR, '+nf(num(r.e.afaSatz),2)+' %, ab '+fmtDate(r.e.afaAb));
+    note((afaInfo.length?afaInfo.join('; ')+'. ':'')+'Eigennutzung privat; Eigener Betrieb als Betriebsausgaben (BA). Prüfung durch den Steuerberater.')}
+
+  if(rows.length&&sek('p35')){h2('Par. 35a EStG – Lohnanteile');
+    table(ecols,[
+      line('Haushaltsnahe Dienstleistungen',r=>E(r.eigen?r.p35.dienst:r.p35.dienstUml)),
+      line('Handwerkerleistungen',r=>E(r.eigen?r.p35.handwerker:r.p35.handwerkerUml)),
+      line('Steuerermäßigung ca. 20 %',r=>r.betrieb?'-':E(0.2*(r.eigen?r.p35.dienst+r.p35.handwerker:r.p35.dienstUml+r.p35.handwerkerUml)))],[-1]);
+    note('Mieter: Anteil an umgelegten Kosten. Eigennutzung: Anteil an allen Kosten inkl. Reparaturen. Nur Arbeits-, Maschinen- und Fahrtkosten, unbar bezahlt.')}
+
+  if(sek('belege')){h2('Belegliste '+y);
+    const B=[...belegeJahr(y)].sort((a,b)=>String(a.datum).localeCompare(String(b.datum)));
+    table([{t:'Datum',x:L,w:18},{t:'Kostenart',x:34,w:50,wrap:1},{t:'Beschreibung',x:86,w:66,wrap:1},{t:'Lohn 35a',x:152,w:18,a:'r'},{t:'Betrag EUR',x:172,w:23,a:'r'}],
+      [...B.map(b=>{const k=kById(b.kostenart);const l=k&&k.p35a?lohnVon(b,k):0;return[fmtDate(b.datum),k?.name||'',[b.text,eById(b.einheit)?'nur '+eById(b.einheit).name:'',b.notiz].filter(Boolean).join(' | '),l?E(l):'',E(b.betrag)]}),['','Summe '+B.length+' Belege','','',E(B.reduce((s,b)=>s+num(b.betrag),0))]],[-1])}
+
+  if(sek('notiz')&&jahr(y).notiz){h2('Notiz');need(10);const l=doc.splitTextToSize(tx(jahr(y).notiz),180);doc.text(l,L,yy);yy+=l.length*4}
+  const n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(120);doc.text('Seite '+i+' von '+n,R,290,{align:'right'});doc.setTextColor(0)}
+  saveFile('Jahresabschluss_'+y+'.pdf',doc.output('blob'));
+}
+function jsonExport(){
+  const data={exportiert:new Date().toISOString(),settings:S.settings,einheiten:S.einheiten,kostenarten:S.kostenarten,belege:S.belege,jahre:S.jahre};
+  saveFile('Nebenkosten_Sicherung_'+today()+'.json',JSON.stringify(data,null,2));
+}
+function pdfExport(){
+  if(!window.jspdf){toast('PDF-Bibliothek nicht geladen.');return}
+  const y=S.year,e=eById(S.abrE),A=abrechnung(y),R=A.einheiten[e.id],st=S.settings,eigen=ohneMieter(e);
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});
+  const E=n=>(Number(n)||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' EUR';
+  let yy=20;const L=20,Rr=190;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90);
+  doc.text([st.vermieter||'',st.adresse||''].filter(Boolean),L,yy);
+  yy+=16;doc.setTextColor(0);doc.setFontSize(11);
+  doc.text([e.mieter||(eigen?'Eigennutzung':''),e.name,e.adresse||''].filter(Boolean),L,yy);
+  doc.text('Datum: '+fmtDate(today()),Rr,yy,{align:'right'});
+  yy+=22;doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text('Betriebskostenabrechnung '+y,L,yy);
+  yy+=7;doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(80);
+  doc.text('Abrechnungszeitraum 01.01.'+y+' - 31.12.'+y+(st.objekt?' | Objekt: '+st.objekt:'')+' | Fläche '+nf(num(e.flaeche))+' m2'+(monateVon(y,e)<12?' | Nutzung '+nf(monateVon(y,e),1)+' Monate':''),L,yy);
+  doc.setTextColor(0);yy+=10;
+  const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text('Kostenart',L,yy);doc.text('Gesamtkosten',105,yy,{align:'right'});doc.text('Verteilung',110,yy);doc.text('Ihr Anteil',Rr,yy,{align:'right'});yy+=2;doc.line(L,yy,Rr,yy);yy+=5;doc.setFont('helvetica','normal')};
+  head();
+  R.posten.forEach(p=>{
+    const nm=doc.splitTextToSize(p.name,58),vt=doc.splitTextToSize((p.schluessel+'; '+p.anteilTxt).replace(/m²/g,'m2').replace(/m³/g,'m3').replace(/€/g,'EUR').replace(/–/g,'-'),52);
+    const h=Math.max(nm.length,vt.length)*4.2+2;
+    if(yy+h>270){doc.addPage();yy=20;head()}
+    doc.setFontSize(9.5);doc.text(nm,L,yy);doc.text(E(p.gesamt),105,yy,{align:'right'});doc.setFontSize(8);doc.setTextColor(80);doc.text(vt,110,yy);doc.setTextColor(0);doc.setFontSize(9.5);doc.text(E(p.betrag),Rr,yy,{align:'right'});
+    yy+=h;});
+  if(yy>230){doc.addPage();yy=20}
+  doc.line(L,yy,Rr,yy);yy+=6;doc.setFont('helvetica','bold');doc.text('Summe Ihrer Kosten',L,yy);doc.text(E(R.summe),Rr,yy,{align:'right'});
+  if(!eigen){yy+=6;doc.setFont('helvetica','normal');doc.text('abzüglich Vorauszahlungen ('+nf(monateVon(y,e),1)+' x '+E(vzMonat(y,e))+')',L,yy);doc.text('- '+E(R.vz),Rr,yy,{align:'right'});
+    yy+=4;doc.setLineWidth(.6);doc.line(L,yy,Rr,yy);doc.setLineWidth(.2);yy+=8;doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text(R.saldo>0?'Nachzahlung':'Guthaben',L,yy);doc.text(E(Math.abs(R.saldo)),Rr,yy,{align:'right'});
+    yy+=10;doc.setFont('helvetica','normal');doc.setFontSize(9.5);
+    const t=R.saldo>0?'Bitte überweisen Sie den Betrag '+((st.frist?'bis '+st.frist:'innerhalb von 30 Tagen')+(st.iban?' auf das Konto '+st.iban:''))+'.':'Das Guthaben wird Ihnen erstattet oder mit der nächsten Miete verrechnet.';
+    const tl=doc.splitTextToSize(t+' Die Belege können nach Absprache eingesehen werden.',170);doc.text(tl,L,yy);yy+=tl.length*4.5+4;
+    const P=p35(y)[e.id];
+    if(P&&P.posten.length){if(yy>250){doc.addPage();yy=20}
+      doc.setFont('helvetica','bold');doc.text('Bescheinigung nach Par. 35a EStG - enthaltene Arbeitskosten:',L,yy);doc.setFont('helvetica','normal');yy+=5;
+      P.posten.forEach(p=>{doc.text((p.name+' ('+ART35[p.art]+')').replace(/[–−]/g,'-'),L,yy);doc.text(E(p.v),Rr,yy,{align:'right'});yy+=4.5})}
+  }else{yy+=8;doc.setFontSize(12);doc.text('Eigenanteil '+y,L,yy);doc.text(E(R.summe),Rr,yy,{align:'right'})}
+  saveFile('Nebenkostenabrechnung_'+y+'_'+e.name.replace(/[^\wäöüÄÖÜß-]+/g,'_')+'.pdf',doc.output('blob'));
+}
+
+init();
+</script>
+</body></html>
