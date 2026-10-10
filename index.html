@@ -373,7 +373,7 @@ async function init(){
   renderNav();safeRender();
   db=localDb;assets=localAssets;downloads=localDownloads;
   try{await IDB.open();await LocalDB.load()}catch(e){console.error(e);setConn(false,'Gerätespeicher nicht verfügbar');$('#view').innerHTML='<div class="card empty">Dieser Browser erlaubt keine Speicherung (privates Fenster?). Bitte normal öffnen.</div>';return}
-  SRV.cfg=srvCfgLesen();
+  SRV.cfg=srvCfgLesen();await Ordner.load();
   db.doc('settings/main').onSnapshot(s=>{S.settings=s.exists?s.data():{};markLoaded('settings')},onSnapErr);
   COLS.forEach(c=>db.collection(c).onSnapshot(q=>{
     const rows=q.docs.map(d=>({id:d.id,...d.data()}));
@@ -507,6 +507,8 @@ function render(){
 function viewStart(){
   const y=S.year,A=abrechnung(y),E=einheiten(),K=kostenarten();
   const warn=[];
+  {const l=ls.get('nk-letzte-sicherung');const tage=l?Math.floor((Date.now()-new Date(l).getTime())/864e5):null;
+   if(S.belege.length&&(tage===null||tage>30))warn.push(`${tage===null?'Noch keine Sicherung':'Letzte Sicherung vor '+tage+' Tagen'} – unter <b>Einstellung → Datensicherung</b> in OneDrive sichern.`)}
   E.forEach(e=>{if(!num(e.flaeche))warn.push(`Für <b>${esc(e.name)}</b> fehlt die Fläche.`)});
   K.filter(usesZaehler).forEach(k=>{if(A.proK[k.id]?.gesamt&&E.some(e=>verbrauch(y,k.id,e.id)===null))warn.push(`Zählerstände für <b>${esc(k.name)}</b> ${y} unvollständig.`)});
   if(A.direktOhne)warn.push(`${eur(A.direktOhne)} sind keiner Einheit zugeordnet (Schlüssel „direkt“).`);
@@ -740,8 +742,9 @@ function viewEinst(){
   <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h3 style="margin:0">Kostenarten</h3><button class="btn sm" data-act="new-kostenart">+ Kostenart</button></div>
     <div class="list">${K.map(k=>`<div class="row click" data-kostenart="${k.id}"><div class="grow"><div class="title">${esc(k.name)}</div><div class="small muted">${k.umlagefaehig===false?'nicht umlagefähig':SCHLUESSEL[k.schluessel]||''}${k.schluessel==='mix'?' · '+nf(k.anteilVerbrauch||70,0)+' % Verbrauch':''}${k.schluessel==='mixpers'?' · '+nf(k.anteilVerbrauch||60,0)+' % Personen / '+nf(100-num(k.anteilVerbrauch||60),0)+' % Fläche':''}${k.umlagefaehig!==false&&umlAnteil(k)<1?' · nur '+nf(umlAnteil(k)*100,2)+' % umlagefähig':''}${(k.ausgeschlossen||[]).length?' · ohne '+k.ausgeschlossen.map(i=>esc(eById(i)?.name||'')).join(', '):''}</div></div></div>`).join('')||'<div class="empty">Noch keine Kostenart.</div>'}</div></div>
   <div class="card"><h3>Datensicherung</h3><div class="actions">
-    <button class="btn" data-act="csv">Belege als CSV (Excel)</button><button class="btn" data-act="json">Komplette Sicherung (JSON)</button><button class="btn" data-act="sicherung">Sicherung einspielen</button>
-  </div><p class="small muted" style="margin:8px 0 0">Die Sicherung am besten in den OneDrive-Ordner speichern. Belegfotos sind nicht in der JSON-Datei, sie liegen im Gerät und auf dem Server.</p></div>
+    ${Ordner.ok()?`<button class="btn primary" data-act="ordner-sichern" ${Ordner.h?'':'disabled'}>Jetzt in OneDrive sichern</button><button class="btn" data-act="ordner-waehlen">${Ordner.h?'Ordner ändern':'OneDrive-Ordner wählen'}</button>`:''}
+    <button class="btn" data-act="json">Sicherung herunterladen (JSON)</button><button class="btn" data-act="csv">Belege als CSV (Excel)</button><button class="btn" data-act="sicherung">Sicherung einspielen</button>
+  </div><p class="small muted" style="margin:8px 0 0">${Ordner.ok()?(Ordner.h?`Speicherort: <b>${esc(Ordner.h.name)}</b>. Alle PDFs landen dort im Jahresordner, „Jetzt sichern“ legt die Daten unter <i>Sicherung</i> und alle Belegfotos/-PDFs unter <i>Jahr/Belege</i> ab.`:'Einmal den OneDrive-Ordner wählen (z. B. OneDrive → Haus → Nebenkosten). Danach speichert die App PDFs und Sicherungen direkt dort.'):'Auf Handy/iPad öffnet sich beim Speichern das Teilen-Menü – dort „OneDrive“ wählen.'} Letzte Sicherung: ${ls.get('nk-letzte-sicherung')?fmtDate(ls.get('nk-letzte-sicherung')):'noch keine'}.</p></div>
   ${serverCard()}</div>`;
 }
 
@@ -897,6 +900,8 @@ function bindView(){
     if(a==='csv')csvExport();
     if(a==='json')jsonExport();
     if(a==='sicherung')$('#import-file').click();
+    if(a==='ordner-waehlen'){try{await Ordner.waehlen();toast('Ordner gewählt: '+Ordner.h.name);render()}catch(e){if(e&&e.name!=='AbortError')toast('Ordner konnte nicht gewählt werden.')}}
+    if(a==='ordner-sichern')sicherungInOrdner();
     if(a==='neu'){await grundeinrichtung();toast('Eingerichtet – bitte Flächen prüfen');go('einst')}
     if(a==='srv-jetzt'){syncKick(true);toast('Abgleich gestartet')}
     if(a==='srv-trennen'){if(!t.classList.contains('armed')){t.classList.add('armed');t.textContent='Wirklich trennen?';return}srvTrennen()}
@@ -913,14 +918,48 @@ function bindView(){
 }
 
 /* ---------- Export ---------- */
-async function saveFile(filename,data){if(!downloads){toast('Download hier nicht verfügbar.');return}
-  try{await downloads.save({filename,data});toast('Datei bereitgestellt')}catch(e){if(e&&e.code==='declined')return;console.error(e);toast('Speichern nicht möglich.')}}
+/* OneDrive-Ordner (Chrome am Laptop): einmal wählen, dann wird direkt hineingespeichert */
+const Ordner={h:null,
+  ok:()=>'showDirectoryPicker' in window,
+  async load(){try{this.h=(await IDB.get('meta','ordner'))||null}catch(e){this.h=null}},
+  async waehlen(){const h=await window.showDirectoryPicker({id:'nk-onedrive',mode:'readwrite',startIn:'documents'});this.h=h;try{await IDB.put('meta','ordner',h)}catch(e){console.warn('Ordner nur für diese Sitzung gemerkt',e)}return h},
+  async bereit(){if(!this.h)return false;const o={mode:'readwrite'};try{if(await this.h.queryPermission(o)==='granted')return true;return(await this.h.requestPermission(o))==='granted'}catch(e){return false}},
+  async schreiben(pfad,blob){let d=this.h;const t=pfad.split('/').filter(Boolean);const name=t.pop();for(const x of t)d=await d.getDirectoryHandle(x,{create:true});
+    const f=await d.getFileHandle(name,{create:true});const w=await f.createWritable();await w.write(blob);await w.close()}
+};
+const MIME={pdf:'application/pdf',json:'application/json',csv:'text/csv'};
+async function saveFile(filename,data,unterordner){
+  const ext=filename.split('.').pop().toLowerCase();
+  const blob=data instanceof Blob?data:new Blob([data],{type:(MIME[ext]||'text/plain')+';charset=utf-8'});
+  try{
+    if(Ordner.h&&await Ordner.bereit()){await Ordner.schreiben((unterordner?unterordner+'/':'')+filename,blob);toast('In '+Ordner.h.name+(unterordner?'/'+unterordner:'')+' gespeichert',3500);return true}
+    const file=new File([blob],filename,{type:blob.type});
+    if(!Ordner.ok()&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:filename});return true}
+    await localDownloads.save({filename,data:blob});toast('Datei heruntergeladen');return true
+  }catch(e){if(e&&e.name==='AbortError')return false;console.error(e);toast('Speichern nicht möglich: '+(e.message||e),5000);return false}}
+function extVon(type){return({'application/pdf':'pdf','image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/heic':'heic'})[type]||'bin'}
+async function sicherungInOrdner(){
+  if(!Ordner.h){toast('Bitte zuerst den OneDrive-Ordner wählen.');return}
+  if(!await Ordner.bereit()){toast('Kein Zugriff auf den Ordner – bitte erneut wählen.');return}
+  toast('Sicherung läuft …',8000);
+  const data={exportiert:new Date().toISOString(),settings:S.settings,einheiten:S.einheiten,kostenarten:S.kostenarten,belege:S.belege,jahre:S.jahre};
+  await Ordner.schreiben('Sicherung/Nebenkosten_Sicherung_'+today()+'.json',new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  let n=0,fehlt=0;
+  for(const b of S.belege){if(!b.foto)continue;
+    const r=await IDB.get('blobs',b.foto).catch(()=>null);let blob=r&&r.blob;
+    if(!blob&&SRV.cfg)blob=await srvBlobGet(b.foto).catch(()=>null);
+    if(!blob){fehlt++;continue}
+    const k=kById(b.kostenart);const name=[b.datum,(k?.name||'Beleg'),(b.text||''),String(r2(num(b.betrag))).replace('.',',')+'EUR'].filter(Boolean).join('_').replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').slice(0,120);
+    await Ordner.schreiben(belegJahr(b)+'/Belege/'+name+'.'+extVon(blob.type||(r&&r.type)),blob);n++}
+  ls.set('nk-letzte-sicherung',today());
+  toast('Gesichert: Daten + '+n+' Belegdateien'+(fehlt?' ('+fehlt+' Belege nicht auf diesem Gerät)':''),5000);render();
+}
 function csvExport(jahrNur){
   const q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
   const rows=[['Datum','Abrechnungsjahr','Kostenart','Umlagefähig','Beschreibung','Nur Einheit','Betrag','Notiz'].map(q).join(';')];
   (jahrNur?belegeJahr(jahrNur):[...S.belege]).sort((a,b)=>String(a.datum).localeCompare(String(b.datum))).forEach(b=>{const k=kById(b.kostenart);
     rows.push([fmtDate(b.datum),belegJahr(b),k?.name||'',k?.umlagefaehig===false?'nein':'ja',b.text||'',eById(b.einheit)?.name||'',String(r2(num(b.betrag))).replace('.',','),b.notiz||''].map(q).join(';'))});
-  saveFile('Belege_Nebenkosten'+(jahrNur?'_'+jahrNur:'')+'.csv','﻿'+rows.join('\r\n'));
+  saveFile('Belege_Nebenkosten'+(jahrNur?'_'+jahrNur:'')+'.csv','﻿'+rows.join('\r\n'),jahrNur?String(jahrNur):'Sicherung');
 }
 function pdfAbschluss(){
   if(!window.jspdf){toast('PDF-Bibliothek nicht geladen.');return}
@@ -997,11 +1036,11 @@ function pdfAbschluss(){
 
   if(sek('notiz')&&jahr(y).notiz){h2('Notiz');need(10);const l=doc.splitTextToSize(tx(jahr(y).notiz),180);doc.text(l,L,yy);yy+=l.length*4}
   const n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(120);doc.text('Seite '+i+' von '+n,R,290,{align:'right'});doc.setTextColor(0)}
-  saveFile('Jahresabschluss_'+y+'.pdf',doc.output('blob'));
+  saveFile('Jahresabschluss_'+y+'.pdf',doc.output('blob'),String(y));
 }
 function jsonExport(){
   const data={exportiert:new Date().toISOString(),settings:S.settings,einheiten:S.einheiten,kostenarten:S.kostenarten,belege:S.belege,jahre:S.jahre};
-  saveFile('Nebenkosten_Sicherung_'+today()+'.json',JSON.stringify(data,null,2));
+  saveFile('Nebenkosten_Sicherung_'+today()+'.json',JSON.stringify(data,null,2),'Sicherung').then(ok=>{if(ok)ls.set('nk-letzte-sicherung',today())});
 }
 function pdfExport(){
   if(!window.jspdf){toast('PDF-Bibliothek nicht geladen.');return}
@@ -1039,7 +1078,7 @@ function pdfExport(){
       doc.setFont('helvetica','bold');doc.text('Bescheinigung nach Par. 35a EStG - enthaltene Arbeitskosten:',L,yy);doc.setFont('helvetica','normal');yy+=5;
       P.posten.forEach(p=>{doc.text((p.name+' ('+ART35[p.art]+')').replace(/[–−]/g,'-'),L,yy);doc.text(E(p.v),Rr,yy,{align:'right'});yy+=4.5})}
   }else{yy+=8;doc.setFontSize(12);doc.text('Eigenanteil '+y,L,yy);doc.text(E(R.summe),Rr,yy,{align:'right'})}
-  saveFile('Nebenkostenabrechnung_'+y+'_'+e.name.replace(/[^\wäöüÄÖÜß-]+/g,'_')+'.pdf',doc.output('blob'));
+  saveFile('Nebenkostenabrechnung_'+y+'_'+e.name.replace(/[^\wäöüÄÖÜß-]+/g,'_')+'.pdf',doc.output('blob'),String(y));
 }
 
 init();
